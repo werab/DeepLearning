@@ -62,52 +62,94 @@ for a in y_train:
 # Reshaping
 X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
 
+
+
 # Importing the Keras libraries and packages
 from keras.models import Sequential
+from keras.layers import Conv1D
+from keras.layers import MaxPooling1D
+from keras.layers import Flatten
 from keras.layers import Dense
-from keras.layers import LSTM
-from keras.layers import Dropout
+
+# Initialising the CNN
+classifier = Sequential()
+
+# Step 1 - Convolution
+classifier.add(Conv1D(64, 9, input_shape = (lookback_batch, 1), activation = 'relu'))
+
+# Step 2 - Pooling
+classifier.add(MaxPooling1D(pool_size = 4))
+
+# Adding a second convolutional layer
+classifier.add(Conv1D(64, 9, activation = 'relu'))
+classifier.add(MaxPooling1D(pool_size = 4))
+
+# Step 3 - Flattening
+classifier.add(Flatten())
+
+# Step 4 - Full connection
+classifier.add(Dense(units = 128, activation = 'relu'))
+classifier.add(Dense(units = 4, activation = 'softmax'))
+
+# Compiling the CNN
+classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
+
+
+if load_saved_weights:
+    classifier.load_weights(saved_weights)
+else:
+    classifier.fit_generator(training_set,
+                         steps_per_epoch = 8000,
+                         epochs = 25,
+                         validation_data = test_set,
+                         validation_steps = 2000)
+
+# Importing the Keras libraries and packages
+#from keras.models import Sequential
+#from keras.layers import Dense
+#from keras.layers import LSTM
+#from keras.layers import Dropout
 
 # Initialising the RNN
-regressor = Sequential()
+#regressor = Sequential()
 
 # Adding the first LSTM layer and some Dropout regularisation
-regressor.add(LSTM(units = 100, return_sequences = True, input_shape = (X_train.shape[1], 1),
-                   name = "LSTM_layer_one"))
+#regressor.add(LSTM(units = 100, return_sequences = True, input_shape = (X_train.shape[1], 1),
+#                   name = "LSTM_layer_one"))
 #                   kernel_initializer = 'uniform', name = "LSTM_layer_one"))
 #regressor.add(Dropout(0.2))
 
 # Adding a second LSTM layer and some Dropout regularisation
-regressor.add(LSTM(units = 100, return_sequences = True,
-                   name = "LSTM_layer_two"))
+#regressor.add(LSTM(units = 100, return_sequences = True,
+#                   name = "LSTM_layer_two"))
 #                   kernel_initializer = 'uniform', name = "LSTM_layer_two"))
 #regressor.add(Dropout(0.2))
 
 # Adding a third LSTM layer and some Dropout regularisation
-regressor.add(LSTM(units = 50, return_sequences = True,
-                   name = "LSTM_layer_three"))
+#regressor.add(LSTM(units = 50, return_sequences = True,
+#                   name = "LSTM_layer_three"))
 #                   kernel_initializer = 'uniform', name = "LSTM_layer_three"))
 #regressor.add(Dropout(0.2))
 
 # Adding a fourth LSTM layer and some Dropout regularisation
-regressor.add(LSTM(units = 50, name = "LSTM_layer_four"))
+#regressor.add(LSTM(units = 50, name = "LSTM_layer_four"))
 #regressor.add(LSTM(units = 50, kernel_initializer = 'uniform', name = "LSTM_layer_four"))
 #regressor.add(Dropout(0.2))
 
 # Adding the output layer
-regressor.add(Dense(units = 4))
+#regressor.add(Dense(units = 4))
 #regressor.add(Dense(units = 4, kernel_initializer = 'uniform'))
 
 # Compiling the RNN
-regressor.compile(optimizer = 'rmsprop', loss = 'categorical_crossentropy', metrics = ['accuracy'])
+#regressor.compile(optimizer = 'rmsprop', loss = 'categorical_crossentropy', metrics = ['accuracy'])
 
-if load_saved_weights:
-    regressor.load_weights(saved_weights)
-else:
+#if load_saved_weights:
+#    regressor.load_weights(saved_weights)
+#else:
     # Fitting the RNN to the Training set
     #regressor.fit(X_train, y_train, epochs = 100, batch_size = 32)
-    regressor.fit(X_train, y_train, epochs = 100, batch_size = 10)
-    regressor.save(saved_weights)
+#    regressor.fit(X_train, y_train, epochs = 100, batch_size = 10)
+#    regressor.save(saved_weights)
 
 # todo: nochmal durchgehen !!!
 dataset_test = pd.read_csv('DAT_MT_EURUSD_M1_201711.csv', header=None)
