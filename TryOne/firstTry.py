@@ -98,11 +98,7 @@ classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metric
 if load_saved_weights:
     classifier.load_weights(saved_weights)
 else:
-    classifier.fit_generator(training_set,
-                         steps_per_epoch = 8000,
-                         epochs = 25,
-                         validation_data = test_set,
-                         validation_steps = 2000)
+    classifier.fit(X_train, y_train, epochs = 5, validation_split=0.2)
 
 # Importing the Keras libraries and packages
 #from keras.models import Sequential
@@ -169,7 +165,7 @@ for i in range(lookback_batch, len(test_set)-forward_set_lengh):
     
 X_test = np.array(X_test)
 X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
-y_pred = regressor.predict(X_test)
+y_pred = classifier.predict(X_test)
 
 # Making the Confusion Matrix
 from sklearn.metrics import confusion_matrix
