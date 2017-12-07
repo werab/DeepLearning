@@ -16,13 +16,13 @@ import pandas as pd
 # convolution window sizing
 
 
-load_saved_weights=False
+load_saved_weights=True
 
 # params
 lookback_batch = 24*60
 lookback_stepsize = 1
 
-saved_weights = "firstTry_weights.h5"
+saved_weights = "firstTry_weights_100epoch.h5"
 
 forward_set_lengh = 60
 bounds = { 'EURUSD' : 0.001 }
@@ -162,7 +162,7 @@ else:
 
 # todo: nochmal durchgehen !!!
 dataset_test = pd.read_csv('DAT_MT_EURUSD_M1_201711.csv', header=None)
-dataset_test = dataset_test[:1000]
+dataset_test = dataset_test
 real_forex = dataset_test.iloc[:, 2:3].values
 
 # Getting the predicted stock price of 2017
@@ -182,7 +182,7 @@ y_pred = classifier.predict(X_test)
 
 # Making the Confusion Matrix
 from sklearn.metrics import confusion_matrix
-cm = confusion_matrix(y_test, y_pred)
+cm = confusion_matrix(np.array(y_test).argmax(axis=1), y_pred.argmax(axis=1))
 
 #upper = value + bounds['EURUSD']
 #lower = value - bounds['EURUSD']
