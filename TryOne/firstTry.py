@@ -4,10 +4,22 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 
+# todos:
+# initialisation weights
+# equal class distribution
+# set categories with from sklearn.preprocessing import LabelEncoder, OneHotEncoder library
+## help https://machinelearningmastery.com/how-to-one-hot-encode-sequence-data-in-python/
+# paramoptimisation
+## automatic testing
+## saved weights to paramnamed.save.file
+# classifier.fit optimisation
+# convolution window sizing
+
+
 load_saved_weights=False
 
 # params
-lookback_batch = 240 # 24*60
+lookback_batch = 24*60
 lookback_stepsize = 1
 
 saved_weights = "firstTry_weights.h5"
@@ -35,9 +47,9 @@ def getCategory(value, np_forward_set):
 
 # Importing the training set
 dataset_train = pd.read_csv('DAT_MT_EURUSD_M1_201710.csv', header=None)
-dataset_train = dataset_train[:1000]
+dataset_train = dataset_train
 training_set = dataset_train.iloc[:, 2:3].values
-training_set = training_set[:1000]
+training_set = training_set
 
 # Feature Scaling
 from sklearn.preprocessing import MinMaxScaler
@@ -98,7 +110,8 @@ classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metric
 if load_saved_weights:
     classifier.load_weights(saved_weights)
 else:
-    classifier.fit(X_train, y_train, epochs = 5, validation_split=0.2)
+    classifier.fit(X_train, y_train, epochs = 25, validation_split=0.2)
+    classifier.save(saved_weights)
 
 # Importing the Keras libraries and packages
 #from keras.models import Sequential
