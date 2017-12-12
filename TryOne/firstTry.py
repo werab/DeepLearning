@@ -74,6 +74,13 @@ for a in y_train:
 # Reshaping
 X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
 
+# calculate weights
+# Creating your class_weight dictionary:
+# 1. determine the ratio of reference_class/other_class. If you choose class_0 as your reference, you'll have (1000/1000, 1000/500, 1000/100) = (1,2,10)
+# 2. map the class label to the ratio: class_weight={0:1, 1:2, 2:10}
+
+# get max class index
+# calc maxclass_val / other classes without rest
 
 
 # Importing the Keras libraries and packages
