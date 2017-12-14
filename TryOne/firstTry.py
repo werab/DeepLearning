@@ -5,16 +5,29 @@ import matplotlib.pyplot as plt
 import pandas as pd
 
 # todos:
-# initialisation weights
-# equal class distribution
-# set categories with from sklearn.preprocessing import LabelEncoder, OneHotEncoder library
-## help https://machinelearningmastery.com/how-to-one-hot-encode-sequence-data-in-python/
-# paramoptimisation
+
+# get csv data (work)
+## download via old script and checkin to new directory
+## split to monthly
+## define check year/month
+## load and train on x month before
+
+# think abount new prediction accurancy (home)
+# visual 
+
+# Conv1D specifications (cumute / work)
+## convolution window sizing
+
+# param optimisation
 ## automatic testing
 ## saved weights to paramnamed.save.file
-# classifier.fit optimisation
-# convolution window sizing
 
+# classifier.fit optimisation
+## class_weight -!!-
+
+# initialisation weights
+# set categories with from sklearn.preprocessing import LabelEncoder, OneHotEncoder library
+## help https://machinelearningmastery.com/how-to-one-hot-encode-sequence-data-in-python/
 
 load_saved_weights=True
 
@@ -25,25 +38,32 @@ lookback_stepsize = 1
 saved_weights = "firstTry_weights_100epoch.h5"
 
 forward_set_lengh = 60
-bounds = { 'EURUSD' : 0.001 }
+bounds = { 'EURUSD' : 0.0010 }
 
 # categories
 # 0: > value + bound                       --> buy 
 # 1: < value - bound                       --> sell
 # 2: < value + bound && > value - bound    --> nothing
-# 3: > value + bound && < value - bound    --> buy && sell
 def getCategory(value, np_forward_set):
     if (np_forward_set.max() > value + bounds['EURUSD']):
         if (np_forward_set.min() < value - bounds['EURUSD']):
-            return [0,0,0,1]
+            # both but direction first
+            if (np_forward_set.argmin() < np_forward_set.argmax()):
+                return [0,1,0]
+            else:
+                return [1,0,0]
         else:
-            return [1,0,0,0]
+            return [1,0,0]
     elif (np_forward_set.min() < value - bounds['EURUSD']):
         if (np_forward_set.max() > value + bounds['EURUSD']):
-            return [0,0,0,1]
+            # both but direction first
+            if (np_forward_set.argmin() < np_forward_set.argmax()):
+                return [0,1,0]
+            else:
+                return [1,0,0]
         else:
-            return [0,1,0,0]
-    return [0,0,1,0]
+            return [0,1,0]
+    return [0,0,1]
 
 # Importing the training set
 dataset_train = pd.read_csv('DAT_MT_EURUSD_M1_201710.csv', header=None)
@@ -67,9 +87,14 @@ for i in range(lookback_batch, len(training_set)-forward_set_lengh, lookback_ste
 #X_train, y_train = np.array(X_train[:5000]), np.array(y_train[:5000])
 X_train, y_train = np.array(X_train), np.array(y_train)
 
-cat_count = [0,0,0,0]
+cat_count = [0,0,0]
 for a in y_train:
     cat_count += a
+
+# equal class distribution
+cat_weights = {}
+for idx, cat_class in enumerate(cat_count):
+    cat_weights[idx] = round(np.max(cat_count)/cat_class)
 
 # Reshaping
 X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
@@ -81,7 +106,6 @@ X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
 
 # get max class index
 # calc maxclass_val / other classes without rest
-
 
 # Importing the Keras libraries and packages
 from keras.models import Sequential
@@ -108,7 +132,7 @@ classifier.add(Flatten())
 
 # Step 4 - Full connection
 classifier.add(Dense(units = 128, activation = 'relu'))
-classifier.add(Dense(units = 4, activation = 'softmax'))
+classifier.add(Dense(units = len(cat_count), activation = 'softmax'))
 
 # Compiling the CNN
 classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
@@ -117,7 +141,10 @@ classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metric
 if load_saved_weights:
     classifier.load_weights(saved_weights)
 else:
-    classifier.fit(X_train, y_train, epochs = 25, validation_split=0.2)
+    classifier.fit(X_train, y_train,
+                   class_weight = cat_weights,
+                   epochs = 25, 
+                   validation_split=0.2)
     classifier.save(saved_weights)
 
 # Importing the Keras libraries and packages
