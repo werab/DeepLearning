@@ -3,14 +3,21 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
+import datetime
+
+_version = 0.3
+_epoch = 100
 
 # todos:
 
 # get csv data (work)
-## download via old script and checkin to new directory
-## split to monthly
+## load per symbol from directory
+## split to weekly -!!-
+## 
 ## define check year/month
-## load and train on x month before
+## load and train on x weeks before
+##
+## fill gaps of missing data with interpolation
 
 # think abount new prediction accurancy (home)
 # visual 
@@ -26,16 +33,18 @@ import pandas as pd
 ## class_weight -!!-
 
 # initialisation weights
+## https://arxiv.org/pdf/1703.04691.pdf
 # set categories with from sklearn.preprocessing import LabelEncoder, OneHotEncoder library
 ## help https://machinelearningmastery.com/how-to-one-hot-encode-sequence-data-in-python/
 
-load_saved_weights=True
+load_saved_weights=False
 
 # params
 lookback_batch = 24*60
 lookback_stepsize = 1
+maxTimeDeltaAcceptance = '1 days 1 hours'
 
-saved_weights = "firstTry_weights_100epoch.h5"
+saved_weights = "version_%s_weights_%sepoch.h5" % (_version, _epoch)
 
 forward_set_lengh = 60
 bounds = { 'EURUSD' : 0.0010 }
@@ -66,23 +75,42 @@ def getCategory(value, np_forward_set):
     return [0,0,1]
 
 # Importing the training set
-dataset_train = pd.read_csv('DAT_MT_EURUSD_M1_201710.csv', header=None)
+dateparse = lambda x: pd.datetime.strptime(x, '%Y.%m.%d %H:%M')
+dataset_train = pd.read_csv('DAT_MT_EURUSD_M1_201710.csv', header=None, 
+                            parse_dates={'datetime': [0, 1]}, date_parser=dateparse)
+
+b = dataset_train[dataset_train['datetime'] > "2017-10-05"]
+
+
 dataset_train = dataset_train
-training_set = dataset_train.iloc[:, 2:3].values
+training_set = dataset_train.iloc[:, 1:2].values
 training_set = training_set
+
+# idx of new week beginnings
+week_change_idx = np.array(dataset_train['datetime'].diff() > pd.Timedelta(maxTimeDeltaAcceptance)).nonzero()
+week_change_idx = np.append(week_change_idx, len(training_set))
 
 # Feature Scaling
 from sklearn.preprocessing import MinMaxScaler
 sc = MinMaxScaler(feature_range = (0, 1))
 training_set_scaled = sc.fit_transform(training_set)
 
-# Creating a data structure with 60 timesteps and 1 output
+# Creating a data structure with 24*60 timesteps and 1 output
 X_train = []
 y_train = []
 
-for i in range(lookback_batch, len(training_set)-forward_set_lengh, lookback_stepsize):
-    X_train.append(training_set_scaled[i-lookback_batch:i, 0])
-    y_train.append(getCategory(training_set[i], np.array(training_set[i+1:i+forward_set_lengh])))
+week_start_idx = 0
+for week_end_idx in np.nditer(week_change_idx):
+#    print("from: ", week_start_idx, " to: ", week_end_idx, " diff: ", week_end_idx-week_start_idx)
+#    print("next range from: ", week_start_idx+lookback_batch, " to: ", week_end_idx-forward_set_lengh)
+    range_from = week_start_idx + lookback_batch
+    range_to = week_end_idx - forward_set_lengh
+    if range_from >= range_to:
+        continue
+    for i in range(range_from, range_to, lookback_stepsize):
+        X_train.append(training_set_scaled[i-lookback_batch:i, 0])
+        y_train.append(getCategory(training_set[i], np.array(training_set[i+1:i+forward_set_lengh])))
+    week_start_idx = week_end_idx
     
 #X_train, y_train = np.array(X_train[:5000]), np.array(y_train[:5000])
 X_train, y_train = np.array(X_train), np.array(y_train)
@@ -113,19 +141,25 @@ from keras.layers import Conv1D
 from keras.layers import MaxPooling1D
 from keras.layers import Flatten
 from keras.layers import Dense
+from keras import initializers
 
 # Initialising the CNN
 classifier = Sequential()
 
 # Step 1 - Convolution
-classifier.add(Conv1D(64, 9, input_shape = (lookback_batch, 1), activation = 'relu'))
-
+classifier.add(Conv1D(32, 9, input_shape = (lookback_batch, 1), activation = 'relu',
+                      dilation_rate = 1, padding = 'causal'))
 # Step 2 - Pooling
-classifier.add(MaxPooling1D(pool_size = 4))
+classifier.add(MaxPooling1D(pool_size = 2))
 
 # Adding a second convolutional layer
-classifier.add(Conv1D(64, 9, activation = 'relu'))
-classifier.add(MaxPooling1D(pool_size = 4))
+classifier.add(Conv1D(32, 9, activation = 'relu',
+                      dilation_rate = 2, padding = 'causal'))
+classifier.add(MaxPooling1D(pool_size = 2))
+
+classifier.add(Conv1D(32, 9, activation = 'relu',
+                      dilation_rate = 4, padding = 'causal'))
+classifier.add(MaxPooling1D(pool_size = 2))
 
 # Step 3 - Flattening
 classifier.add(Flatten())
@@ -143,7 +177,7 @@ if load_saved_weights:
 else:
     classifier.fit(X_train, y_train,
                    class_weight = cat_weights,
-                   epochs = 25, 
+                   epochs = _epoch, 
                    validation_split=0.2)
     classifier.save(saved_weights)
 
