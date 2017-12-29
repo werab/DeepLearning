@@ -3,7 +3,8 @@
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
-import datetime
+from datetime import datetime, timedelta
+import glob
 
 _version = 0.3
 _epoch = 100
@@ -44,10 +45,18 @@ lookback_batch = 24*60
 lookback_stepsize = 1
 maxTimeDeltaAcceptance = '1 days 1 hours'
 
+weekDelta = 52*5
+begin = datetime(2012,5,1)
+end = begin + timedelta(weeks=weekDelta)
+
 saved_weights = "version_%s_weights_%sepoch.h5" % (_version, _epoch)
 
 forward_set_lengh = 60
 bounds = { 'EURUSD' : 0.0010 }
+
+# const
+
+dateparse = lambda x: pd.datetime.strptime(x, '%Y.%m.%d %H:%M')
 
 # categories
 # 0: > value + bound                       --> buy 
@@ -74,13 +83,24 @@ def getCategory(value, np_forward_set):
             return [0,1,0]
     return [0,0,1]
 
+# symbol matches directory
+# file used as filter (for testing)
+def loadDataFrame(symbol, file='*'):
+    df = None
+    for file in glob.glob("%s/%s" % (symbol, file)):
+        print("Load: ", file)
+        next_df = pd.read_csv(file, header=None, 
+                         parse_dates={'datetime': [0, 1]}, 
+                         date_parser=dateparse)
+        df = pd.concat([df, next_df], ignore_index=True)
+    return df
+
 # Importing the training set
-dateparse = lambda x: pd.datetime.strptime(x, '%Y.%m.%d %H:%M')
-dataset_train = pd.read_csv('DAT_MT_EURUSD_M1_201710.csv', header=None, 
-                            parse_dates={'datetime': [0, 1]}, date_parser=dateparse)
-
-b = dataset_train[dataset_train['datetime'] > "2017-10-05"]
-
+# parse 0/1 column to datetime column
+#dataset_train = loadDataFrame('EURUSD', '*20170*')
+dataset_train = loadDataFrame('EURUSD')
+dataset_train = dataset_train[(dataset_train['datetime'] > begin) & (dataset_train['datetime'] < end)]
+dataset_train = dataset_train.reset_index(drop=True)
 
 dataset_train = dataset_train
 training_set = dataset_train.iloc[:, 1:2].values
