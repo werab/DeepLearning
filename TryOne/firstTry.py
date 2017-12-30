@@ -12,11 +12,11 @@ _epoch = 100
 # todos:
 
 # get csv data (work)
-## load per symbol from directory
+## load per symbol from directory -!!-
 ## split to weekly -!!-
 ## 
-## define check year/month
-## load and train on x weeks before
+## define check year/month -!!-
+## load and train on x weeks before -!!-
 ##
 ## fill gaps of missing data with interpolation
 
@@ -38,24 +38,26 @@ _epoch = 100
 # set categories with from sklearn.preprocessing import LabelEncoder, OneHotEncoder library
 ## help https://machinelearningmastery.com/how-to-one-hot-encode-sequence-data-in-python/
 
-load_saved_weights=False
+load_saved_weights=True
+load_weights_file = "H5/v0.3_200epoch_lookback5_year2015.h5"
 
 # params
 lookback_batch = 24*60
 lookback_stepsize = 1
 maxTimeDeltaAcceptance = '1 days 1 hours'
 
-weekDelta = 52*5
-begin = datetime(2012,5,1)
-end = begin + timedelta(weeks=weekDelta)
+weekDeltaTrain = 52*1
+weekDeltaProve = 4
+endTrain = datetime(2016,1,2)
+beginTrain = endTrain - timedelta(weeks=weekDeltaTrain)
+endTest = endTrain + timedelta(weeks=weekDeltaProve)
 
-saved_weights = "version_%s_weights_%sepoch.h5" % (_version, _epoch)
+save_weights = "v%s_ep%s_end%s_weekDeltaTrain%s.h5" % (_version, _epoch, endTrain, weekDeltaTrain)
 
 forward_set_lengh = 60
 bounds = { 'EURUSD' : 0.0010 }
 
 # const
-
 dateparse = lambda x: pd.datetime.strptime(x, '%Y.%m.%d %H:%M')
 
 # categories
@@ -83,6 +85,29 @@ def getCategory(value, np_forward_set):
             return [0,1,0]
     return [0,0,1]
 
+def getStructuredData(dataset, orignal_set, scaled_set):
+    x = []
+    y = []
+
+    # idx of new week beginnings
+    week_change_idx = np.array(dataset['datetime'].diff() > pd.Timedelta(maxTimeDeltaAcceptance)).nonzero()
+    week_change_idx = np.append(week_change_idx, len(orignal_set))
+    
+    week_start_idx = 0
+    for week_end_idx in np.nditer(week_change_idx):
+    #    print("from: ", week_start_idx, " to: ", week_end_idx, " diff: ", week_end_idx-week_start_idx)
+    #    print("next range from: ", week_start_idx+lookback_batch, " to: ", week_end_idx-forward_set_lengh)
+        range_from = week_start_idx + lookback_batch
+        range_to = week_end_idx - forward_set_lengh
+        if range_from >= range_to:
+            continue
+        for i in range(range_from, range_to, lookback_stepsize):
+            x.append(scaled_set[i-lookback_batch:i, 0])
+            y.append(getCategory(orignal_set[i], np.array(orignal_set[i+1:i+forward_set_lengh])))
+        week_start_idx = week_end_idx  
+    
+    return x, y
+
 # symbol matches directory
 # file used as filter (for testing)
 def loadDataFrame(symbol, file='*'):
@@ -98,39 +123,24 @@ def loadDataFrame(symbol, file='*'):
 # Importing the training set
 # parse 0/1 column to datetime column
 #dataset_train = loadDataFrame('EURUSD', '*20170*')
-dataset_train = loadDataFrame('EURUSD')
-dataset_train = dataset_train[(dataset_train['datetime'] > begin) & (dataset_train['datetime'] < end)]
+dataset_raw = loadDataFrame('EURUSD', '*201[5,6]*')
+
+dataset_train = dataset_raw[(dataset_raw['datetime'] > beginTrain) & (dataset_raw['datetime'] < endTrain)]
 dataset_train = dataset_train.reset_index(drop=True)
-
-dataset_train = dataset_train
 training_set = dataset_train.iloc[:, 1:2].values
-training_set = training_set
 
-# idx of new week beginnings
-week_change_idx = np.array(dataset_train['datetime'].diff() > pd.Timedelta(maxTimeDeltaAcceptance)).nonzero()
-week_change_idx = np.append(week_change_idx, len(training_set))
+dataset_test = dataset_raw[(dataset_raw['datetime'] > endTrain) & (dataset_raw['datetime'] < endTest)]
+dataset_test = dataset_test.reset_index(drop=True)
+test_set = dataset_test.iloc[:, 1:2].values
 
 # Feature Scaling
 from sklearn.preprocessing import MinMaxScaler
 sc = MinMaxScaler(feature_range = (0, 1))
 training_set_scaled = sc.fit_transform(training_set)
 
-# Creating a data structure with 24*60 timesteps and 1 output
-X_train = []
-y_train = []
 
-week_start_idx = 0
-for week_end_idx in np.nditer(week_change_idx):
-#    print("from: ", week_start_idx, " to: ", week_end_idx, " diff: ", week_end_idx-week_start_idx)
-#    print("next range from: ", week_start_idx+lookback_batch, " to: ", week_end_idx-forward_set_lengh)
-    range_from = week_start_idx + lookback_batch
-    range_to = week_end_idx - forward_set_lengh
-    if range_from >= range_to:
-        continue
-    for i in range(range_from, range_to, lookback_stepsize):
-        X_train.append(training_set_scaled[i-lookback_batch:i, 0])
-        y_train.append(getCategory(training_set[i], np.array(training_set[i+1:i+forward_set_lengh])))
-    week_start_idx = week_end_idx
+    
+X_train, y_train = getStructuredData(dataset_train, training_set, training_set_scaled)
     
 #X_train, y_train = np.array(X_train[:5000]), np.array(y_train[:5000])
 X_train, y_train = np.array(X_train), np.array(y_train)
@@ -193,13 +203,13 @@ classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metric
 
 
 if load_saved_weights:
-    classifier.load_weights(saved_weights)
+    classifier.load_weights(load_weights_file)
 else:
     classifier.fit(X_train, y_train,
                    class_weight = cat_weights,
                    epochs = _epoch, 
                    validation_split=0.2)
-    classifier.save(saved_weights)
+    classifier.save(save_weights)
 
 # Importing the Keras libraries and packages
 #from keras.models import Sequential
@@ -241,29 +251,37 @@ else:
 #regressor.compile(optimizer = 'rmsprop', loss = 'categorical_crossentropy', metrics = ['accuracy'])
 
 #if load_saved_weights:
-#    regressor.load_weights(saved_weights)
+#    regressor.load_weights(save_weights)
 #else:
     # Fitting the RNN to the Training set
     #regressor.fit(X_train, y_train, epochs = 100, batch_size = 32)
 #    regressor.fit(X_train, y_train, epochs = 100, batch_size = 10)
-#    regressor.save(saved_weights)
+#    regressor.save(save_weights)
 
 # todo: nochmal durchgehen !!!
-dataset_test = pd.read_csv('DAT_MT_EURUSD_M1_201711.csv', header=None)
-dataset_test = dataset_test
-real_forex = dataset_test.iloc[:, 2:3].values
+#dataset_test = pd.read_csv('DAT_MT_EURUSD_M1_201711.csv', header=None)
+#dataset_test = dataset_test
+#real_forex = dataset_test.iloc[:, 1:2].values
 
 # Getting the predicted stock price of 2017
-dataset_total = pd.concat((dataset_train[2], dataset_test[2]), axis = 0)
-test_set = dataset_total[len(dataset_total) - len(dataset_test) - lookback_batch:].values
-inputs = test_set.reshape(-1,1) # nochmal nachschauen im Lehrgang
-inputs = sc.transform(inputs)
-X_test = []
-y_test = []
-for i in range(lookback_batch, len(test_set)-forward_set_lengh):
-    X_test.append(inputs[i-lookback_batch:i, 0])
-    y_test.append(getCategory(test_set[i], np.array(test_set[i+1:i+forward_set_lengh])))
+#dataset_total = pd.concat((dataset_train[2], dataset_test[2]), axis = 0)
+#test_set = dataset_total[len(dataset_total) - len(dataset_test) - lookback_batch:].values
     
+test_set_scaled = test_set.reshape(-1,1) # nochmal nachschauen im Lehrgang
+test_set_scaled = sc.transform(test_set_scaled)
+
+#X_test = []
+#y_test = []
+#for i in range(lookback_batch, len(test_set)-forward_set_lengh):
+#    X_test.append(test_set_scaled[i-lookback_batch:i, 0])
+#    y_test.append(getCategory(test_set[i], np.array(test_set[i+1:i+forward_set_lengh])))
+#    
+    
+X_test, y_test = getStructuredData(dataset_test, test_set, test_set_scaled)
+
+b = np.array(y_test).argmax(axis=1).reshape(-1,1)
+c = b
+
 X_test = np.array(X_test)
 X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
 y_pred = classifier.predict(X_test)
@@ -271,6 +289,9 @@ y_pred = classifier.predict(X_test)
 # Making the Confusion Matrix
 from sklearn.metrics import confusion_matrix
 cm = confusion_matrix(np.array(y_test).argmax(axis=1), y_pred.argmax(axis=1))
+
+result_view = np.hstack((y_pred, np.array(y_test).argmax(axis=1).reshape(-1,1)))
+
 
 #upper = value + bounds['EURUSD']
 #lower = value - bounds['EURUSD']
