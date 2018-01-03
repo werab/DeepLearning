@@ -18,7 +18,11 @@ _epoch = 100
 ## define check year/month -!!-
 ## load and train on x weeks before -!!-
 ##
-## fill gaps of missing data with interpolation
+
+# fill gaps of missing data with interpolation
+## add missing times and set to "np.nan"
+## https://pandas.pydata.org/pandas-docs/stable/missing_data.html
+## df.interpolate(method='quadratic')
 
 # think abount new prediction accurancy (home)
 # visual 
@@ -114,22 +118,28 @@ def loadDataFrame(symbol, file='*'):
     df = None
     for file in glob.glob("%s/%s" % (symbol, file)):
         print("Load: ", file)
-        next_df = pd.read_csv(file, header=None, 
+        next_df = pd.read_csv(file, header=None, index_col = 'datetime',
                          parse_dates={'datetime': [0, 1]}, 
                          date_parser=dateparse)
-        df = pd.concat([df, next_df], ignore_index=True)
+        df = pd.concat([df, next_df])
     return df
 
 # Importing the training set
 # parse 0/1 column to datetime column
-#dataset_train = loadDataFrame('EURUSD', '*20170*')
-dataset_raw = loadDataFrame('EURUSD', '*201[5,6]*')
+dataset_raw = loadDataFrame('EURUSD', '*20170[1,2,3]*').sort_index()
 
-dataset_train = dataset_raw[(dataset_raw['datetime'] > beginTrain) & (dataset_raw['datetime'] < endTrain)]
+#dataset_raw = loadDataFrame('EURUSD', '*201[5,6]*').sort_index()
+#dataset_raw = loadDataFrame('EURUSD', '*201701*').sort_index()
+
+#dataset_raw.index = pd.DatetimeIndex(dataset_raw.index)
+
+dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='quadratic', limit=60).dropna().reset_index()
+
+dataset_train = dataset_inter[(dataset_inter['datetime'] > beginTrain) & (dataset_inter['datetime'] < endTrain)]
 dataset_train = dataset_train.reset_index(drop=True)
 training_set = dataset_train.iloc[:, 1:2].values
 
-dataset_test = dataset_raw[(dataset_raw['datetime'] > endTrain) & (dataset_raw['datetime'] < endTest)]
+dataset_test = dataset_inter[(dataset_inter['datetime'] > endTrain) & (dataset_inter['datetime'] < endTest)]
 dataset_test = dataset_test.reset_index(drop=True)
 test_set = dataset_test.iloc[:, 1:2].values
 
