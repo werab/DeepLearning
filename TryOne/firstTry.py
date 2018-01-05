@@ -11,23 +11,16 @@ _epoch = 100
 
 # todos:
 
-# get csv data (work)
-## load per symbol from directory -!!-
-## split to weekly -!!-
-## 
-## define check year/month -!!-
-## load and train on x weeks before -!!-
-##
+# Conv1D --> Conv2D
+## load multible rows
+## arrange X_train with multible datasets
 
-# fill gaps of missing data with interpolation
-## add missing times and set to "np.nan"
-## https://pandas.pydata.org/pandas-docs/stable/missing_data.html
-## df.interpolate(method='quadratic')
+# https://keras.io/visualization/
 
 # think abount new prediction accurancy (home)
-# visual 
+# visual
 
-# Conv1D specifications (cumute / work)
+# Conv2D specifications (cumute / work)
 ## convolution window sizing
 
 # param optimisation
@@ -35,7 +28,6 @@ _epoch = 100
 ## saved weights to paramnamed.save.file
 
 # classifier.fit optimisation
-## class_weight -!!-
 
 # initialisation weights
 ## https://arxiv.org/pdf/1703.04691.pdf
