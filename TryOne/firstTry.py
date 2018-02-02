@@ -5,8 +5,10 @@ import matplotlib.pyplot as plt
 import pandas as pd
 from datetime import datetime, timedelta
 import glob
+from sklearn.preprocessing import MinMaxScaler
+import sys
 
-_version = 0.3
+_version = 0.4
 _epoch = 100
 
 # todos:
@@ -34,7 +36,7 @@ _epoch = 100
 # set categories with from sklearn.preprocessing import LabelEncoder, OneHotEncoder library
 ## help https://machinelearningmastery.com/how-to-one-hot-encode-sequence-data-in-python/
 
-load_saved_weights=True
+load_saved_weights=False
 load_weights_file = "H5/v0.3_200epoch_lookback5_year2015.h5"
 
 # params
@@ -42,13 +44,19 @@ lookback_batch = 24*60
 lookback_stepsize = 1
 maxTimeDeltaAcceptance = '1 days 1 hours'
 
-weekDeltaTrain = 52*1
+fileregex = '*2017*'
+weekDeltaTrain = 8*1
 weekDeltaProve = 4
-endTrain = datetime(2016,1,2)
+endTrain = datetime(2017,3,11) # year, month, day
 beginTrain = endTrain - timedelta(weeks=weekDeltaTrain)
 endTest = endTrain + timedelta(weeks=weekDeltaProve)
 
 save_weights = "v%s_ep%s_end%s_weekDeltaTrain%s.h5" % (_version, _epoch, endTrain, weekDeltaTrain)
+
+mainSymbol = 'EURUSD'
+#indicatorSymbols = ['EURGBP', 'GBPUSD', 'USDJPY', 'EURJPY']
+indicatorSymbols = ['EURJPY']
+interpolateLimit = 60
 
 forward_set_lengh = 60
 bounds = { 'EURUSD' : 0.0010 }
@@ -61,8 +69,8 @@ dateparse = lambda x: pd.datetime.strptime(x, '%Y.%m.%d %H:%M')
 # 1: < value - bound                       --> sell
 # 2: < value + bound && > value - bound    --> nothing
 def getCategory(value, np_forward_set):
-    if (np_forward_set.max() > value + bounds['EURUSD']):
-        if (np_forward_set.min() < value - bounds['EURUSD']):
+    if (np_forward_set.max() > value + bounds[mainSymbol]):
+        if (np_forward_set.min() < value - bounds[mainSymbol]):
             # both but direction first
             if (np_forward_set.argmin() < np_forward_set.argmax()):
                 return [0,1,0]
@@ -70,8 +78,8 @@ def getCategory(value, np_forward_set):
                 return [1,0,0]
         else:
             return [1,0,0]
-    elif (np_forward_set.min() < value - bounds['EURUSD']):
-        if (np_forward_set.max() > value + bounds['EURUSD']):
+    elif (np_forward_set.min() < value - bounds[mainSymbol]):
+        if (np_forward_set.max() > value + bounds[mainSymbol]):
             # both but direction first
             if (np_forward_set.argmin() < np_forward_set.argmax()):
                 return [0,1,0]
@@ -81,7 +89,7 @@ def getCategory(value, np_forward_set):
             return [0,1,0]
     return [0,0,1]
 
-def getStructuredData(dataset, orignal_set, scaled_set):
+def getStructuredData(dataset, orignal_set, scaled_set, symbol):
     x = []
     y = []
 
@@ -99,8 +107,9 @@ def getStructuredData(dataset, orignal_set, scaled_set):
             continue
         for i in range(range_from, range_to, lookback_stepsize):
             x.append(scaled_set[i-lookback_batch:i, 0])
-            y.append(getCategory(orignal_set[i], np.array(orignal_set[i+1:i+forward_set_lengh])))
-        week_start_idx = week_end_idx  
+            if symbol == mainSymbol:
+                y.append(getCategory(orignal_set[i], np.array(orignal_set[i+1:i+forward_set_lengh])))
+        week_start_idx = week_end_idx
     
     return x, y
 
@@ -116,48 +125,99 @@ def loadDataFrame(symbol, file='*'):
         df = pd.concat([df, next_df])
     return df
 
-# Importing the training set
-# parse 0/1 column to datetime column
-dataset_raw = loadDataFrame('EURUSD', '*20170[1,2,3]*').sort_index()
+symbol = 'EURJPY'
 
-#dataset_raw = loadDataFrame('EURUSD', '*201[5,6]*').sort_index()
-#dataset_raw = loadDataFrame('EURUSD', '*201701*').sort_index()
-
-#dataset_raw.index = pd.DatetimeIndex(dataset_raw.index)
-
-dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='quadratic', limit=60).dropna().reset_index()
-
-dataset_train = dataset_inter[(dataset_inter['datetime'] > beginTrain) & (dataset_inter['datetime'] < endTrain)]
-dataset_train = dataset_train.reset_index(drop=True)
-training_set = dataset_train.iloc[:, 1:2].values
-
-dataset_test = dataset_inter[(dataset_inter['datetime'] > endTrain) & (dataset_inter['datetime'] < endTest)]
-dataset_test = dataset_test.reset_index(drop=True)
-test_set = dataset_test.iloc[:, 1:2].values
-
-# Feature Scaling
-from sklearn.preprocessing import MinMaxScaler
-sc = MinMaxScaler(feature_range = (0, 1))
-training_set_scaled = sc.fit_transform(training_set)
-
-
+# Importing training/test set
+def getSymbolData(symbol, fileregex):
+    # parse 0/1 column to datetime column
+    dataset_raw = None
+    try:
+        dataset_raw = loadDataFrame(symbol, fileregex).sort_index()
+    except:
+        print("missing data for symbol %s for regex '%s' 0 rows found." % (symbol, fileregex))
+        raise
     
-X_train, y_train = getStructuredData(dataset_train, training_set, training_set_scaled)
+    dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='quadratic', limit=interpolateLimit).dropna().reset_index()
+    print("Symbol: %s dataset_raw.resample('1T').asfreq(): %i" % (mainSymbol, len(dataset_raw.resample('1T').asfreq())))
+
+    dataset_train = dataset_inter[(dataset_inter['datetime'] > beginTrain) & (dataset_inter['datetime'] < endTrain)]
+    dataset_train = dataset_train.reset_index(drop=True)
+    training_set = dataset_train.iloc[:, 1:2].values
     
-#X_train, y_train = np.array(X_train[:5000]), np.array(y_train[:5000])
-X_train, y_train = np.array(X_train), np.array(y_train)
+    dataset_test = dataset_inter[(dataset_inter['datetime'] > endTrain) & (dataset_inter['datetime'] < endTest)]
+    dataset_test = dataset_test.reset_index(drop=True)
+    test_set = dataset_test.iloc[:, 1:2].values
+    
+    # Feature Scaling
+    sc = MinMaxScaler(feature_range = (0, 1))
+    training_set_scaled = sc.fit_transform(training_set)
+    
+    x_arr_train, y_arr_train = getStructuredData(dataset_train, training_set, training_set_scaled, symbol)
+    x_arr_test, y_arr_test = getStructuredData(dataset_test, test_set, sc.transform(test_set), symbol)
+    
+    return x_arr_train, y_arr_train, x_arr_test, y_arr_test
 
-cat_count = [0,0,0]
-for a in y_train:
-    cat_count += a
+def calcCategories(y_train):
+    cat_count = [0,0,0]
+    for a in y_train:
+        cat_count += a
+    
+    # equal class distribution
+    cat_weights = {}
+    for idx, cat_class in enumerate(cat_count):
+        cat_weights[idx] = round(np.max(cat_count)/cat_class)
+        
+    return cat_count, cat_weights
 
-# equal class distribution
-cat_weights = {}
-for idx, cat_class in enumerate(cat_count):
-    cat_weights[idx] = round(np.max(cat_count)/cat_class)
+############
+#   Main   #
+############
+
+x_arr_main, y_arr_main, x_arr_test, y_arr_test = getSymbolData(mainSymbol, fileregex)
+
+y_train = np.array(y_arr_main)
+cat_count, cat_weights = calcCategories(y_train)
+
+X_train = [x_arr_main]
+X_test = [x_arr_test]
+
+print("Symbol: %s Size: %i" % (mainSymbol, len(x_arr_main)))
+
+#scale_hash = { mainSymbol : sc_main }
+#test_set_hash = { mainSymbol : test_set_main }
+
+for sym in indicatorSymbols:
+    print(sym)
+    x_arr_sym_train, _, x_arr_sym_test, _ = getSymbolData(sym, fileregex)
+    print("Symbol: %s Size: %i" % (sym, len(x_arr_sym_train)))
+    X_train.append(x_arr_sym_train)
+    X_test.append(x_arr_sym_test)
+    
+X_train = np.array(X_train)
+X_test = np.array(X_test)
 
 # Reshaping
-X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
+X_train = np.moveaxis(X_train, 0, -1)
+X_test = np.moveaxis(X_test, 0, -1)
+
+# Reshaping
+#X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
+
+#a = np.array([[1.,1.01,1.02,1.03,1.04,1.05,1.06,1.07,1.08,1.09],
+#              [1.1,1.11,1.12,1.13,1.14,1.15,1.16,1.17,1.18,1.19]])
+#b = np.array([[2.,2.01,2.02,2.03,2.04,2.05,2.06,2.07,2.08,2.09],
+#              [2.1,2.11,2.12,2.13,2.14,2.15,2.16,2.17,2.18,2.19]])
+#c = np.array([[3.,3.01,3.02,3.03,3.04,3.05,3.06,3.07,3.08,3.09],
+#              [3.1,3.11,3.12,3.13,3.14,3.15,3.16,3.17,3.18,3.19]])
+#
+#x = []
+#x.append(a)
+#x.append(b)
+#x.append(c)
+#
+#d = np.array(x)
+#d.shape
+#np.moveaxis(d, 0, -1).shape
 
 # calculate weights
 # Creating your class_weight dictionary:
@@ -179,7 +239,7 @@ from keras import initializers
 classifier = Sequential()
 
 # Step 1 - Convolution
-classifier.add(Conv1D(32, 9, input_shape = (lookback_batch, 1), activation = 'relu',
+classifier.add(Conv1D(32, 9, input_shape = (lookback_batch, X_train.shape[2]), activation = 'relu',
                       dilation_rate = 1, padding = 'causal'))
 # Step 2 - Pooling
 classifier.add(MaxPooling1D(pool_size = 2))
@@ -268,9 +328,10 @@ else:
 # Getting the predicted stock price of 2017
 #dataset_total = pd.concat((dataset_train[2], dataset_test[2]), axis = 0)
 #test_set = dataset_total[len(dataset_total) - len(dataset_test) - lookback_batch:].values
+
     
-test_set_scaled = test_set.reshape(-1,1) # nochmal nachschauen im Lehrgang
-test_set_scaled = sc.transform(test_set_scaled)
+#test_set_scaled = test_set.reshape(-1,1) # nochmal nachschauen im Lehrgang
+#test_set_scaled = sc.transform(test_set_scaled)
 
 #X_test = []
 #y_test = []
@@ -278,14 +339,11 @@ test_set_scaled = sc.transform(test_set_scaled)
 #    X_test.append(test_set_scaled[i-lookback_batch:i, 0])
 #    y_test.append(getCategory(test_set[i], np.array(test_set[i+1:i+forward_set_lengh])))
 #    
-    
-X_test, y_test = getStructuredData(dataset_test, test_set, test_set_scaled)
 
-b = np.array(y_test).argmax(axis=1).reshape(-1,1)
-c = b
+#X_test, y_test = getStructuredData(dataset_test, test_set, test_set_scaled)
 
-X_test = np.array(X_test)
-X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
+#X_test = np.array(X_test)
+#X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
 y_pred = classifier.predict(X_test)
 
 # Making the Confusion Matrix
