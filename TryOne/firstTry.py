@@ -8,7 +8,7 @@ import glob
 from sklearn.preprocessing import MinMaxScaler
 import sys
 
-_version = 0.4
+_version = 0.5
 _epoch = 100
 
 # todos:
@@ -44,18 +44,25 @@ lookback_batch = 24*60
 lookback_stepsize = 1
 maxTimeDeltaAcceptance = '1 days 1 hours'
 
+#fileregex = '*201801*'
+#weekDeltaTrain = 2*1
+#weekDeltaProve = 2
+#endTrain = datetime(2018,1,14) # year, month, day
+
 fileregex = '*2017*'
-weekDeltaTrain = 8*1
+weekDeltaTrain = 48*1
 weekDeltaProve = 4
-endTrain = datetime(2017,3,11) # year, month, day
+endTrain = datetime(2017,12,3) # year, month, day
+
 beginTrain = endTrain - timedelta(weeks=weekDeltaTrain)
 endTest = endTrain + timedelta(weeks=weekDeltaProve)
 
-save_weights = "v%s_ep%s_end%s_weekDeltaTrain%s.h5" % (_version, _epoch, endTrain, weekDeltaTrain)
+save_weights = "v%s_ep%s_weekDeltaTrain%s.h5" % (_version, _epoch, weekDeltaTrain)
 
 mainSymbol = 'EURUSD'
-#indicatorSymbols = ['EURGBP', 'GBPUSD', 'USDJPY', 'EURJPY']
-indicatorSymbols = ['EURJPY']
+indicatorSymbols = ['EURGBP', 'GBPUSD', 'USDJPY', 'EURJPY']
+#indicatorSymbols = ['EURGBP', 'EURJPY']
+#indicatorSymbols = ['EURJPY']
 interpolateLimit = 60
 
 forward_set_lengh = 60
@@ -94,7 +101,7 @@ def getStructuredData(dataset, orignal_set, scaled_set, symbol):
     y = []
 
     # idx of new week beginnings
-    week_change_idx = np.array(dataset['datetime'].diff() > pd.Timedelta(maxTimeDeltaAcceptance)).nonzero()
+    week_change_idx = np.array(dataset.reset_index()['datetime'].diff() > pd.Timedelta(maxTimeDeltaAcceptance)).nonzero()
     week_change_idx = np.append(week_change_idx, len(orignal_set))
     
     week_start_idx = 0
@@ -115,7 +122,7 @@ def getStructuredData(dataset, orignal_set, scaled_set, symbol):
 
 # symbol matches directory
 # file used as filter (for testing)
-def loadDataFrame(symbol, file='*'):
+def loadSymbolCSV(symbol, file='*'):
     df = None
     for file in glob.glob("%s/%s" % (symbol, file)):
         print("Load: ", file)
@@ -125,37 +132,106 @@ def loadDataFrame(symbol, file='*'):
         df = pd.concat([df, next_df])
     return df
 
-symbol = 'EURJPY'
-
 # Importing training/test set
-def getSymbolData(symbol, fileregex):
+#def getSymbolData(symbol, fileregex):
+#    # parse 0/1 column to datetime column
+#    dataset_raw = None
+#    try:
+#        dataset_raw = loadSymbolCSV(symbol, fileregex).sort_index()
+#    except:
+#        print("missing data for symbol %s for regex '%s' 0 rows found." % (symbol, fileregex))
+#        raise
+#    
+#    dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='quadratic', limit=interpolateLimit).dropna().reset_index()
+#
+#    dataset_train = dataset_inter[(dataset_inter['datetime'] > beginTrain) & (dataset_inter['datetime'] < endTrain)]
+#    dataset_train = dataset_train.reset_index(drop=True)
+#    training_set = dataset_train.iloc[:, 1:2].values
+#    
+#    dataset_test = dataset_inter[(dataset_inter['datetime'] > endTrain) & (dataset_inter['datetime'] < endTest)]
+#    dataset_test = dataset_test.reset_index(drop=True)
+#    test_set = dataset_test.iloc[:, 1:2].values
+#    
+#    # Feature Scaling
+#    sc = MinMaxScaler(feature_range = (0, 1))
+#    training_set_scaled = sc.fit_transform(training_set)
+#    
+#    x_arr_train, y_arr_train = getStructuredData(dataset_train, training_set, training_set_scaled, symbol)
+#    x_arr_test, y_arr_test = getStructuredData(dataset_test, test_set, sc.transform(test_set), symbol)
+#    
+#    return x_arr_train, y_arr_train, x_arr_test, y_arr_test
+
+def getXYArrays(datasetTrain, datasetTest):
+    sc = MinMaxScaler(feature_range = (0, 1))
+    
+    ## Main Symbol ##
+    symArrTrainMain = datasetTrain[mainSymbol]
+    training_set_main = np.array([symArrTrainMain.values]).reshape(-1,1)
+    training_set_scaled_main = sc.fit_transform(training_set_main)
+    
+    symArrTestMain = datasetTest[mainSymbol]
+    test_set_main = np.array([symArrTestMain.values]).reshape(-1,1)
+    test_set_scaled_main = sc.transform(test_set_main)
+    
+    x_arr_train_main, y_arr_train_main = getStructuredData(
+            symArrTrainMain, training_set_main, training_set_scaled_main, mainSymbol)
+    x_arr_test_main, y_arr_test_main = getStructuredData(
+            symArrTestMain, test_set_main, test_set_scaled_main, mainSymbol)
+    
+    y_train = np.array(y_arr_train_main)
+    y_test = np.array(y_arr_test_main)
+    
+    X_train = [x_arr_train_main]
+    X_test = [x_arr_test_main]
+    
+    # other indicator symbols
+    for symbol in indicatorSymbols:
+        print(datasetTrain[symbol])
+        symArrTrain = datasetTrain[symbol]
+        training_set = np.array([symArrTrain.values]).reshape(-1,1)
+        training_set_scaled = sc.fit_transform(training_set)
+        
+        symArrTest = datasetTest[symbol]
+        test_set = np.array([symArrTest.values]).reshape(-1,1)
+        test_set_scaled = sc.transform(test_set)
+    
+        x_arr_train, y_arr_train = getStructuredData(
+                symArrTrain, training_set, training_set_scaled, symbol)
+        x_arr_test, y_arr_test = getStructuredData(
+                symArrTest, test_set, test_set_scaled, symbol)
+
+        X_train.append(x_arr_train)
+        X_test.append(x_arr_test)
+
+    X_train = np.array(X_train)
+    X_test = np.array(X_test)
+    
+    # Reshaping
+    X_train = np.moveaxis(X_train, 0, -1)
+    X_test = np.moveaxis(X_test, 0, -1)
+
+    return X_train, y_train, X_test, y_test
+
+def getDataForSymbol(symbol, fileregex):
     # parse 0/1 column to datetime column
     dataset_raw = None
     try:
-        dataset_raw = loadDataFrame(symbol, fileregex).sort_index()
+        dataset_raw = loadSymbolCSV(symbol, fileregex).sort_index()
     except:
         print("missing data for symbol %s for regex '%s' 0 rows found." % (symbol, fileregex))
         raise
     
-    dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='quadratic', limit=interpolateLimit).dropna().reset_index()
-    print("Symbol: %s dataset_raw.resample('1T').asfreq(): %i" % (mainSymbol, len(dataset_raw.resample('1T').asfreq())))
+    dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='quadratic', limit=interpolateLimit).dropna()
 
-    dataset_train = dataset_inter[(dataset_inter['datetime'] > beginTrain) & (dataset_inter['datetime'] < endTrain)]
-    dataset_train = dataset_train.reset_index(drop=True)
-    training_set = dataset_train.iloc[:, 1:2].values
+    dataset_train = dataset_inter[(dataset_inter.index > beginTrain) & (dataset_inter.index < endTrain)]
+    dataset_train = dataset_train.iloc[:, 0:1]
+    dataset_train = dataset_train.rename(columns = {2: symbol})
     
-    dataset_test = dataset_inter[(dataset_inter['datetime'] > endTrain) & (dataset_inter['datetime'] < endTest)]
-    dataset_test = dataset_test.reset_index(drop=True)
-    test_set = dataset_test.iloc[:, 1:2].values
-    
-    # Feature Scaling
-    sc = MinMaxScaler(feature_range = (0, 1))
-    training_set_scaled = sc.fit_transform(training_set)
-    
-    x_arr_train, y_arr_train = getStructuredData(dataset_train, training_set, training_set_scaled, symbol)
-    x_arr_test, y_arr_test = getStructuredData(dataset_test, test_set, sc.transform(test_set), symbol)
-    
-    return x_arr_train, y_arr_train, x_arr_test, y_arr_test
+    dataset_test = dataset_inter[(dataset_inter.index > endTrain) & (dataset_inter.index < endTest)]
+    dataset_test = dataset_test.iloc[:, 0:1]
+    dataset_test = dataset_test.rename(columns = {2: symbol})
+
+    return dataset_train, dataset_test
 
 def calcCategories(y_train):
     cat_count = [0,0,0]
@@ -173,32 +249,68 @@ def calcCategories(y_train):
 #   Main   #
 ############
 
-x_arr_main, y_arr_main, x_arr_test, y_arr_test = getSymbolData(mainSymbol, fileregex)
+##################################################################################################
+# TEST
 
-y_train = np.array(y_arr_main)
-cat_count, cat_weights = calcCategories(y_train)
-
-X_train = [x_arr_main]
-X_test = [x_arr_test]
-
-print("Symbol: %s Size: %i" % (mainSymbol, len(x_arr_main)))
-
-#scale_hash = { mainSymbol : sc_main }
-#test_set_hash = { mainSymbol : test_set_main }
+trainSetRAW, testSetRAW = getDataForSymbol(mainSymbol, fileregex)
 
 for sym in indicatorSymbols:
-    print(sym)
-    x_arr_sym_train, _, x_arr_sym_test, _ = getSymbolData(sym, fileregex)
-    print("Symbol: %s Size: %i" % (sym, len(x_arr_sym_train)))
-    X_train.append(x_arr_sym_train)
-    X_test.append(x_arr_sym_test)
-    
-X_train = np.array(X_train)
-X_test = np.array(X_test)
+    _train, _test = getDataForSymbol(sym, fileregex)
 
-# Reshaping
-X_train = np.moveaxis(X_train, 0, -1)
-X_test = np.moveaxis(X_test, 0, -1)
+    trainSetRAW = pd.concat([trainSetRAW, _train], axis=1, join_axes=[trainSetRAW.index])
+    testSetRAW = pd.concat([testSetRAW, _test], axis=1, join_axes=[testSetRAW.index])
+
+trainSetRAW = trainSetRAW.dropna()
+testSetRAW = testSetRAW.dropna()
+
+X_train, y_train, X_test, y_test = getXYArrays(trainSetRAW, testSetRAW)
+
+cat_count, cat_weights = calcCategories(y_train)
+
+#mainS = trainSetRAW[mainSymbol]
+#mainSt = np.array([mainS.values]).reshape(-1,1)
+#sc = MinMaxScaler(feature_range = (0, 1))
+#training_set_scaled = sc.fit_transform(mainSt)
+#
+#
+#d = mainS.iloc[:, 1:2].values
+#mainS.diff()
+#
+#mainSt = [mainS.values]
+#
+#mainSt = np.moveaxis(mainS, 0, -1)
+#
+#week_change_idx = np.array(mainS.reset_index()['datetime'].diff() > pd.Timedelta(maxTimeDeltaAcceptance)).nonzero()
+#week_change_idx = np.append(week_change_idx, len(mainSt))
+
+##################################################################################################
+
+#x_arr_main, y_arr_main, x_arr_test, y_arr_test = getSymbolData(mainSymbol, fileregex)
+#
+#y_train = np.array(y_arr_main)
+#cat_count, cat_weights = calcCategories(y_train)
+#
+#X_train = [x_arr_main]
+#X_test = [x_arr_test]
+#
+#print("Symbol: %s Size: %i" % (mainSymbol, len(x_arr_main)))
+#
+##scale_hash = { mainSymbol : sc_main }
+##test_set_hash = { mainSymbol : test_set_main }
+#
+#for sym in indicatorSymbols:
+#    print(sym)
+#    x_arr_sym_train, _, x_arr_sym_test, _ = getSymbolData(sym, fileregex)
+#    print("Symbol: %s Size: %i" % (sym, len(x_arr_sym_train)))
+#    X_train.append(x_arr_sym_train)
+#    X_test.append(x_arr_sym_test)
+#    
+#X_train = np.array(X_train)
+#X_test = np.array(X_test)
+#
+## Reshaping
+#X_train = np.moveaxis(X_train, 0, -1)
+#X_test = np.moveaxis(X_test, 0, -1)
 
 # Reshaping
 #X_train = np.reshape(X_train, (X_train.shape[0], X_train.shape[1], 1))
@@ -272,6 +384,8 @@ else:
                    epochs = _epoch, 
                    validation_split=0.2)
     classifier.save(save_weights)
+
+sys.exit(0)
 
 # Importing the Keras libraries and packages
 #from keras.models import Sequential
