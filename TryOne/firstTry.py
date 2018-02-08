@@ -36,8 +36,8 @@ _epoch = 100
 # set categories with from sklearn.preprocessing import LabelEncoder, OneHotEncoder library
 ## help https://machinelearningmastery.com/how-to-one-hot-encode-sequence-data-in-python/
 
-load_saved_weights=False
-load_weights_file = "H5/v0.3_200epoch_lookback5_year2015.h5"
+load_saved_weights=True
+load_weights_file = "H5/v0.5_ep100_weekDeltaTrain48.h5"
 
 # params
 lookback_batch = 24*60
@@ -203,7 +203,10 @@ def getXYArrays(datasetTrain, datasetTest):
         X_train.append(x_arr_train)
         X_test.append(x_arr_test)
 
-    X_train = np.array(X_train)
+    if not load_saved_weights:
+        X_train = np.array(X_train)
+    else:
+        X_train = []
     X_test = np.array(X_test)
     
     # Reshaping
@@ -347,34 +350,38 @@ from keras.layers import Flatten
 from keras.layers import Dense
 from keras import initializers
 
-# Initialising the CNN
-classifier = Sequential()
+def getClassifier(X_test):
+    # Initialising the CNN
+    classifier = Sequential()
+    
+    # Step 1 - Convolution
+    classifier.add(Conv1D(32, 9, input_shape = (lookback_batch, X_test.shape[2]), activation = 'relu',
+                          dilation_rate = 1, padding = 'causal'))
+    # Step 2 - Pooling
+    classifier.add(MaxPooling1D(pool_size = 2))
+    
+    # Adding a second convolutional layer
+    classifier.add(Conv1D(32, 9, activation = 'relu',
+                          dilation_rate = 2, padding = 'causal'))
+    classifier.add(MaxPooling1D(pool_size = 2))
+    
+    classifier.add(Conv1D(32, 9, activation = 'relu',
+                          dilation_rate = 4, padding = 'causal'))
+    classifier.add(MaxPooling1D(pool_size = 2))
+    
+    # Step 3 - Flattening
+    classifier.add(Flatten())
+    
+    # Step 4 - Full connection
+    classifier.add(Dense(units = 128, activation = 'relu'))
+    classifier.add(Dense(units = len(cat_count), activation = 'softmax'))
+    
+    # Compiling the CNN
+    classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
 
-# Step 1 - Convolution
-classifier.add(Conv1D(32, 9, input_shape = (lookback_batch, X_train.shape[2]), activation = 'relu',
-                      dilation_rate = 1, padding = 'causal'))
-# Step 2 - Pooling
-classifier.add(MaxPooling1D(pool_size = 2))
+    return classifier
 
-# Adding a second convolutional layer
-classifier.add(Conv1D(32, 9, activation = 'relu',
-                      dilation_rate = 2, padding = 'causal'))
-classifier.add(MaxPooling1D(pool_size = 2))
-
-classifier.add(Conv1D(32, 9, activation = 'relu',
-                      dilation_rate = 4, padding = 'causal'))
-classifier.add(MaxPooling1D(pool_size = 2))
-
-# Step 3 - Flattening
-classifier.add(Flatten())
-
-# Step 4 - Full connection
-classifier.add(Dense(units = 128, activation = 'relu'))
-classifier.add(Dense(units = len(cat_count), activation = 'softmax'))
-
-# Compiling the CNN
-classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
-
+classifier = getClassifier(X_test)
 
 if load_saved_weights:
     classifier.load_weights(load_weights_file)
