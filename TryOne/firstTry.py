@@ -13,14 +13,13 @@ _epoch = 100
 
 # todos:
 
-# Conv1D --> Conv2D
-## load multible rows
-## arrange X_train with multible datasets
+# regularisation
+## https://keras.io/regularizers/
 
-# https://keras.io/visualization/
 
 # think abount new prediction accurancy (home)
 # visual
+## https://keras.io/visualization/
 
 # Conv2D specifications (cumute / work)
 ## convolution window sizing
@@ -31,10 +30,26 @@ _epoch = 100
 
 # classifier.fit optimisation
 
+# general optimisation techniques
+## https://cambridgespark.com/content/tutorials/neural-networks-tuning-techniques/index.html
+
 # initialisation weights
 ## https://arxiv.org/pdf/1703.04691.pdf
+## https://stackoverflow.com/questions/46798708/keras-how-to-view-initialized-weights-i-e-before-training
+
+# leaning rate scheduling
+# google search: keras learning rate decay
+## https://machinelearningmastery.com/using-learning-rate-schedules-deep-learning-models-python-keras/
+## https://github.com/keras-team/keras/issues/898
+
 # set categories with from sklearn.preprocessing import LabelEncoder, OneHotEncoder library
 ## help https://machinelearningmastery.com/how-to-one-hot-encode-sequence-data-in-python/
+
+# course from marco
+## https://www.coursera.org/learn/machine-learning
+# go article
+## https://www.nature.com/articles/nature24270.epdf?author_access_token=VJXbVjaSHxFoctQQ4p2k4tRgN0jAjWel9jnR3ZoTv0PVW4gB86EEpGqTRDtpIz-2rmo8-KG06gqVobU5NSCFeHILHcVFUeMsbvwS-lxjqQGg98faovwjxeTUgZAUMnRQ
+
 
 load_saved_weights=True
 load_weights_file = "H5/v0.5_ep100_weekDeltaTrain48.h5"
@@ -186,7 +201,6 @@ def getXYArrays(datasetTrain, datasetTest):
     
     # other indicator symbols
     for symbol in indicatorSymbols:
-        print(datasetTrain[symbol])
         symArrTrain = datasetTrain[symbol]
         training_set = np.array([symArrTrain.values]).reshape(-1,1)
         training_set_scaled = sc.fit_transform(training_set)
@@ -348,6 +362,7 @@ from keras.layers import Conv1D
 from keras.layers import MaxPooling1D
 from keras.layers import Flatten
 from keras.layers import Dense
+from keras import regularizers
 from keras import initializers
 
 def getClassifier(X_test):
@@ -357,16 +372,22 @@ def getClassifier(X_test):
     # Step 1 - Convolution
     classifier.add(Conv1D(32, 9, input_shape = (lookback_batch, X_test.shape[2]), activation = 'relu',
                           dilation_rate = 1, padding = 'causal'))
+#                          kernel_regularizer = regularizers.l2(0.005),
+#                          activity_regularizer = regularizers.l2(0.005)))
     # Step 2 - Pooling
     classifier.add(MaxPooling1D(pool_size = 2))
     
     # Adding a second convolutional layer
     classifier.add(Conv1D(32, 9, activation = 'relu',
                           dilation_rate = 2, padding = 'causal'))
+#                          kernel_regularizer = regularizers.l2(0.005),
+#                          activity_regularizer = regularizers.l2(0.005)))
     classifier.add(MaxPooling1D(pool_size = 2))
     
     classifier.add(Conv1D(32, 9, activation = 'relu',
                           dilation_rate = 4, padding = 'causal'))
+#                          kernel_regularizer = regularizers.l2(0.005),
+#                          activity_regularizer = regularizers.l2(0.005)))
     classifier.add(MaxPooling1D(pool_size = 2))
     
     # Step 3 - Flattening
@@ -471,8 +492,28 @@ y_pred = classifier.predict(X_test)
 from sklearn.metrics import confusion_matrix
 cm = confusion_matrix(np.array(y_test).argmax(axis=1), y_pred.argmax(axis=1))
 
+
+y_pred_i = np.argwhere(y_pred > 0.9)
+y_pred_cond = np.take(y_pred, np.moveaxis(y_pred_i, 0, -1)[0], axis=0)
+y_test_cond = np.take(y_test, np.moveaxis(y_pred_i, 0, -1)[0], axis=0)
+cm_cond = confusion_matrix(np.array(y_test_cond).argmax(axis=1), y_pred_cond.argmax(axis=1))
+
+good = cm_cond[0][0] + cm_cond[1][1]
+bad = cm_cond[1][0] + cm_cond[0][1]
+unknown = cm_cond[0][2] + cm_cond[1][2]
+sumall = good + bad + unknown
+
+print("good: %.2f bad: %.2f unknown: %.2f" % (good/sumall, bad/sumall, unknown/sumall))
+
 result_view = np.hstack((y_pred, np.array(y_test).argmax(axis=1).reshape(-1,1)))
 
+
+
+X_plot = np.moveaxis(X_test, -1, 0)[0:1,:,1].flatten()
+len(X_plot)
+
+plt.plot(X_plot)
+plt.show()
 
 #upper = value + bounds['EURUSD']
 #lower = value - bounds['EURUSD']
