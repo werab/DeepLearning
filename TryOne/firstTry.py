@@ -4,9 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from datetime import datetime, timedelta
-import glob
-from sklearn.preprocessing import MinMaxScaler
-import sys
+
 
 _version = 0.5
 _epoch = 100
@@ -16,17 +14,16 @@ _epoch = 100
 # regularisation
 ## https://keras.io/regularizers/
 
+# param optimisation
+## automatic testing
+## # https://keras.io/callbacks/
+## saved weights to paramnamed.save.file
 
-# think abount new prediction accurancy (home)
 # visual
 ## https://keras.io/visualization/
 
 # Conv2D specifications (cumute / work)
 ## convolution window sizing
-
-# param optimisation
-## automatic testing
-## saved weights to paramnamed.save.file
 
 # classifier.fit optimisation
 
@@ -55,200 +52,55 @@ load_saved_weights=True
 load_weights_file = "H5/v0.5_ep100_weekDeltaTrain48.h5"
 
 # params
-lookback_batch = 24*60
-lookback_stepsize = 1
-maxTimeDeltaAcceptance = '1 days 1 hours'
+#lookback_batch = 24*60
+#lookback_stepsize = 1
+#maxTimeDeltaAcceptance = '1 days 1 hours'
 
-#fileregex = '*201801*'
-#weekDeltaTrain = 2*1
-#weekDeltaProve = 2
-#endTrain = datetime(2018,1,14) # year, month, day
+fileregex = '*201801*'
+weekDeltaTrain = 2*1
+weekDeltaProve = 2
+endTrain = datetime(2018,1,14) # year, month, day
+useTrainData = True
 
-fileregex = '*2017*'
-weekDeltaTrain = 48*1
-weekDeltaProve = 4
-endTrain = datetime(2017,12,3) # year, month, day
+#fileregex = '*2017*'
+#weekDeltaTrain = 48*1
+#weekDeltaProve = 4
+#endTrain = datetime(2017,12,3) # year, month, day
+#useTrainData = False
 
 beginTrain = endTrain - timedelta(weeks=weekDeltaTrain)
 endTest = endTrain + timedelta(weeks=weekDeltaProve)
 
 save_weights = "v%s_ep%s_weekDeltaTrain%s.h5" % (_version, _epoch, weekDeltaTrain)
 
-mainSymbol = 'EURUSD'
-indicatorSymbols = ['EURGBP', 'GBPUSD', 'USDJPY', 'EURJPY']
+#mainSymbol = 'EURUSD'
+#indicatorSymbols = ['EURGBP', 'GBPUSD', 'USDJPY', 'EURJPY']
 #indicatorSymbols = ['EURGBP', 'EURJPY']
 #indicatorSymbols = ['EURJPY']
-interpolateLimit = 60
+#interpolateLimit = 60
 
-forward_set_lengh = 60
-bounds = { 'EURUSD' : 0.0010 }
+#forward_set_lengh = 60
+#bounds = { 'EURUSD' : 0.0010 }
 
-# const
-dateparse = lambda x: pd.datetime.strptime(x, '%Y.%m.%d %H:%M')
+config = {
+     'mainSymbol'             : 'EURUSD',
+     'indicatorSymbols'       : ['EURGBP', 'GBPUSD', 'USDJPY', 'EURJPY'],
+     'lookback_batch'         : 24*60,
+     'lookback_stepsize'      : 1,
+     'maxTimeDeltaAcceptance' : '1 days 1 hours',
+     'fileregex'              : fileregex,
+     'forward_set_lengh'      : 60,
+     'interpolateLimit'       : 60,
+     'bounds'                 : { 'EURUSD' : 0.0010 },
+     'beginTrain'             : beginTrain,
+     'endTrain'               : endTrain,
+     'endTest'                : endTest,
+     'weekDeltaTrain'         : weekDeltaTrain,
+     'weekDeltaProve'         : weekDeltaProve
+}
 
-# categories
-# 0: > value + bound                       --> buy 
-# 1: < value - bound                       --> sell
-# 2: < value + bound && > value - bound    --> nothing
-def getCategory(value, np_forward_set):
-    if (np_forward_set.max() > value + bounds[mainSymbol]):
-        if (np_forward_set.min() < value - bounds[mainSymbol]):
-            # both but direction first
-            if (np_forward_set.argmin() < np_forward_set.argmax()):
-                return [0,1,0]
-            else:
-                return [1,0,0]
-        else:
-            return [1,0,0]
-    elif (np_forward_set.min() < value - bounds[mainSymbol]):
-        if (np_forward_set.max() > value + bounds[mainSymbol]):
-            # both but direction first
-            if (np_forward_set.argmin() < np_forward_set.argmax()):
-                return [0,1,0]
-            else:
-                return [1,0,0]
-        else:
-            return [0,1,0]
-    return [0,0,1]
 
-def getStructuredData(dataset, orignal_set, scaled_set, symbol):
-    x = []
-    y = []
-
-    # idx of new week beginnings
-    week_change_idx = np.array(dataset.reset_index()['datetime'].diff() > pd.Timedelta(maxTimeDeltaAcceptance)).nonzero()
-    week_change_idx = np.append(week_change_idx, len(orignal_set))
-    
-    week_start_idx = 0
-    for week_end_idx in np.nditer(week_change_idx):
-    #    print("from: ", week_start_idx, " to: ", week_end_idx, " diff: ", week_end_idx-week_start_idx)
-    #    print("next range from: ", week_start_idx+lookback_batch, " to: ", week_end_idx-forward_set_lengh)
-        range_from = week_start_idx + lookback_batch
-        range_to = week_end_idx - forward_set_lengh
-        if range_from >= range_to:
-            continue
-        for i in range(range_from, range_to, lookback_stepsize):
-            x.append(scaled_set[i-lookback_batch:i, 0])
-            if symbol == mainSymbol:
-                y.append(getCategory(orignal_set[i], np.array(orignal_set[i+1:i+forward_set_lengh])))
-        week_start_idx = week_end_idx
-    
-    return x, y
-
-# symbol matches directory
-# file used as filter (for testing)
-def loadSymbolCSV(symbol, file='*'):
-    df = None
-    for file in glob.glob("%s/%s" % (symbol, file)):
-        print("Load: ", file)
-        next_df = pd.read_csv(file, header=None, index_col = 'datetime',
-                         parse_dates={'datetime': [0, 1]}, 
-                         date_parser=dateparse)
-        df = pd.concat([df, next_df])
-    return df
-
-# Importing training/test set
-#def getSymbolData(symbol, fileregex):
-#    # parse 0/1 column to datetime column
-#    dataset_raw = None
-#    try:
-#        dataset_raw = loadSymbolCSV(symbol, fileregex).sort_index()
-#    except:
-#        print("missing data for symbol %s for regex '%s' 0 rows found." % (symbol, fileregex))
-#        raise
-#    
-#    dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='quadratic', limit=interpolateLimit).dropna().reset_index()
-#
-#    dataset_train = dataset_inter[(dataset_inter['datetime'] > beginTrain) & (dataset_inter['datetime'] < endTrain)]
-#    dataset_train = dataset_train.reset_index(drop=True)
-#    training_set = dataset_train.iloc[:, 1:2].values
-#    
-#    dataset_test = dataset_inter[(dataset_inter['datetime'] > endTrain) & (dataset_inter['datetime'] < endTest)]
-#    dataset_test = dataset_test.reset_index(drop=True)
-#    test_set = dataset_test.iloc[:, 1:2].values
-#    
-#    # Feature Scaling
-#    sc = MinMaxScaler(feature_range = (0, 1))
-#    training_set_scaled = sc.fit_transform(training_set)
-#    
-#    x_arr_train, y_arr_train = getStructuredData(dataset_train, training_set, training_set_scaled, symbol)
-#    x_arr_test, y_arr_test = getStructuredData(dataset_test, test_set, sc.transform(test_set), symbol)
-#    
-#    return x_arr_train, y_arr_train, x_arr_test, y_arr_test
-
-def getXYArrays(datasetTrain, datasetTest):
-    sc = MinMaxScaler(feature_range = (0, 1))
-    
-    ## Main Symbol ##
-    symArrTrainMain = datasetTrain[mainSymbol]
-    training_set_main = np.array([symArrTrainMain.values]).reshape(-1,1)
-    training_set_scaled_main = sc.fit_transform(training_set_main)
-    
-    symArrTestMain = datasetTest[mainSymbol]
-    test_set_main = np.array([symArrTestMain.values]).reshape(-1,1)
-    test_set_scaled_main = sc.transform(test_set_main)
-    
-    x_arr_train_main, y_arr_train_main = getStructuredData(
-            symArrTrainMain, training_set_main, training_set_scaled_main, mainSymbol)
-    x_arr_test_main, y_arr_test_main = getStructuredData(
-            symArrTestMain, test_set_main, test_set_scaled_main, mainSymbol)
-    
-    y_train = np.array(y_arr_train_main)
-    y_test = np.array(y_arr_test_main)
-    
-    X_train = [x_arr_train_main]
-    X_test = [x_arr_test_main]
-    
-    # other indicator symbols
-    for symbol in indicatorSymbols:
-        symArrTrain = datasetTrain[symbol]
-        training_set = np.array([symArrTrain.values]).reshape(-1,1)
-        training_set_scaled = sc.fit_transform(training_set)
-        
-        symArrTest = datasetTest[symbol]
-        test_set = np.array([symArrTest.values]).reshape(-1,1)
-        test_set_scaled = sc.transform(test_set)
-    
-        x_arr_train, y_arr_train = getStructuredData(
-                symArrTrain, training_set, training_set_scaled, symbol)
-        x_arr_test, y_arr_test = getStructuredData(
-                symArrTest, test_set, test_set_scaled, symbol)
-
-        X_train.append(x_arr_train)
-        X_test.append(x_arr_test)
-
-    if not load_saved_weights:
-        X_train = np.array(X_train)
-    else:
-        X_train = []
-    X_test = np.array(X_test)
-    
-    # Reshaping
-    X_train = np.moveaxis(X_train, 0, -1)
-    X_test = np.moveaxis(X_test, 0, -1)
-
-    return X_train, y_train, X_test, y_test
-
-def getDataForSymbol(symbol, fileregex):
-    # parse 0/1 column to datetime column
-    dataset_raw = None
-    try:
-        dataset_raw = loadSymbolCSV(symbol, fileregex).sort_index()
-    except:
-        print("missing data for symbol %s for regex '%s' 0 rows found." % (symbol, fileregex))
-        raise
-    
-    dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='quadratic', limit=interpolateLimit).dropna()
-
-    dataset_train = dataset_inter[(dataset_inter.index > beginTrain) & (dataset_inter.index < endTrain)]
-    dataset_train = dataset_train.iloc[:, 0:1]
-    dataset_train = dataset_train.rename(columns = {2: symbol})
-    
-    dataset_test = dataset_inter[(dataset_inter.index > endTrain) & (dataset_inter.index < endTest)]
-    dataset_test = dataset_test.iloc[:, 0:1]
-    dataset_test = dataset_test.rename(columns = {2: symbol})
-
-    return dataset_train, dataset_test
+from preprocessing.dataSet import DataSet
 
 def calcCategories(y_train):
     cat_count = [0,0,0]
@@ -269,10 +121,12 @@ def calcCategories(y_train):
 ##################################################################################################
 # TEST
 
-trainSetRAW, testSetRAW = getDataForSymbol(mainSymbol, fileregex)
+dataSet = DataSet(config, useTrainData)
 
-for sym in indicatorSymbols:
-    _train, _test = getDataForSymbol(sym, fileregex)
+trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'], fileregex)
+
+for sym in config['indicatorSymbols']:
+    _train, _test = dataSet.getDataForSymbol(sym, fileregex)
 
     trainSetRAW = pd.concat([trainSetRAW, _train], axis=1, join_axes=[trainSetRAW.index])
     testSetRAW = pd.concat([testSetRAW, _test], axis=1, join_axes=[testSetRAW.index])
@@ -280,7 +134,7 @@ for sym in indicatorSymbols:
 trainSetRAW = trainSetRAW.dropna()
 testSetRAW = testSetRAW.dropna()
 
-X_train, y_train, X_test, y_test = getXYArrays(trainSetRAW, testSetRAW)
+X_train, y_train, X_test, y_test = dataSet.getXYArrays(trainSetRAW, testSetRAW)
 
 cat_count, cat_weights = calcCategories(y_train)
 
@@ -365,44 +219,54 @@ from keras.layers import Dense
 from keras import regularizers
 from keras import initializers
 
-def getClassifier(X_test):
-    # Initialising the CNN
-    classifier = Sequential()
-    
-    # Step 1 - Convolution
-    classifier.add(Conv1D(32, 9, input_shape = (lookback_batch, X_test.shape[2]), activation = 'relu',
-                          dilation_rate = 1, padding = 'causal'))
-#                          kernel_regularizer = regularizers.l2(0.005),
-#                          activity_regularizer = regularizers.l2(0.005)))
-    # Step 2 - Pooling
-    classifier.add(MaxPooling1D(pool_size = 2))
-    
-    # Adding a second convolutional layer
-    classifier.add(Conv1D(32, 9, activation = 'relu',
-                          dilation_rate = 2, padding = 'causal'))
-#                          kernel_regularizer = regularizers.l2(0.005),
-#                          activity_regularizer = regularizers.l2(0.005)))
-    classifier.add(MaxPooling1D(pool_size = 2))
-    
-    classifier.add(Conv1D(32, 9, activation = 'relu',
-                          dilation_rate = 4, padding = 'causal'))
-#                          kernel_regularizer = regularizers.l2(0.005),
-#                          activity_regularizer = regularizers.l2(0.005)))
-    classifier.add(MaxPooling1D(pool_size = 2))
-    
-    # Step 3 - Flattening
-    classifier.add(Flatten())
-    
-    # Step 4 - Full connection
-    classifier.add(Dense(units = 128, activation = 'relu'))
-    classifier.add(Dense(units = len(cat_count), activation = 'softmax'))
-    
-    # Compiling the CNN
-    classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
+class Conf1DClassifier():
+    def __init__(self, config, dataSetCount):
+        self.lookback_batch = config['lookback_batch']
+        
+        self.dataSetCount = dataSetCount
 
-    return classifier
+    def getClassifier(self):
+        # Initialising the CNN
+        classifier = Sequential()
+        
+        # Step 1 - Convolution
+        classifier.add(Conv1D(32, 9, input_shape = (self.lookback_batch, self.dataSetCount), 
+                              activation = 'relu',
+                              dilation_rate = 1, 
+                              padding = 'causal'))
+    #                          kernel_regularizer = regularizers.l2(0.005),
+    #                          activity_regularizer = regularizers.l2(0.005)))
+        # Step 2 - Pooling
+        classifier.add(MaxPooling1D(pool_size = 2))
+        
+        # Adding a second convolutional layer
+        classifier.add(Conv1D(32, 9, activation = 'relu',
+                              dilation_rate = 2, padding = 'causal'))
+    #                          kernel_regularizer = regularizers.l2(0.005),
+    #                          activity_regularizer = regularizers.l2(0.005)))
+        classifier.add(MaxPooling1D(pool_size = 2))
+        
+        classifier.add(Conv1D(32, 9, activation = 'relu',
+                              dilation_rate = 4, padding = 'causal'))
+    #                          kernel_regularizer = regularizers.l2(0.005),
+    #                          activity_regularizer = regularizers.l2(0.005)))
+        classifier.add(MaxPooling1D(pool_size = 2))
+        
+        # Step 3 - Flattening
+        classifier.add(Flatten())
+        
+        # Step 4 - Full connection
+        classifier.add(Dense(units = 128, activation = 'relu'))
+        classifier.add(Dense(units = len(cat_count), activation = 'softmax'))
+        
+        # Compiling the CNN
+        classifier.compile(optimizer = 'adam', loss = 'categorical_crossentropy', metrics = ['accuracy'])
+    
+        return classifier
 
-classifier = getClassifier(X_test)
+conf1D = Conf1DClassifier(config, X_test.shape[2])
+
+classifier = conf1D.getClassifier()
 
 if load_saved_weights:
     classifier.load_weights(load_weights_file)
@@ -412,8 +276,6 @@ else:
                    epochs = _epoch, 
                    validation_split=0.2)
     classifier.save(save_weights)
-
-sys.exit(0)
 
 # Importing the Keras libraries and packages
 #from keras.models import Sequential
@@ -494,6 +356,12 @@ cm = confusion_matrix(np.array(y_test).argmax(axis=1), y_pred.argmax(axis=1))
 
 
 y_pred_i = np.argwhere(y_pred > 0.9)
+
+y_pred_0 = y_pred_i[np.where((y_pred_i[:,1] == 0))[0], :][:,0]
+y_pred_1 = y_pred_i[np.where((y_pred_i[:,1] == 1))[0], :][:,0]
+
+np.moveaxis(y_pred_i, -1, 0)[0:1]
+
 y_pred_cond = np.take(y_pred, np.moveaxis(y_pred_i, 0, -1)[0], axis=0)
 y_test_cond = np.take(y_test, np.moveaxis(y_pred_i, 0, -1)[0], axis=0)
 cm_cond = confusion_matrix(np.array(y_test_cond).argmax(axis=1), y_pred_cond.argmax(axis=1))
@@ -507,13 +375,23 @@ print("good: %.2f bad: %.2f unknown: %.2f" % (good/sumall, bad/sumall, unknown/s
 
 result_view = np.hstack((y_pred, np.array(y_test).argmax(axis=1).reshape(-1,1)))
 
+# View Plot
+def consecutive(data, stepsize=1):
+    return np.split(data, np.where(np.diff(data) != stepsize)[0]+1)
 
-
-X_plot = np.moveaxis(X_test, -1, 0)[0:1,:,1].flatten()
-len(X_plot)
-
-plt.plot(X_plot)
-plt.show()
+if load_saved_weights:
+    for x in consecutive(y_pred_0):
+        plt.axvspan(x[0]-1,x[-1], facecolor='g', alpha=0.2)
+    
+    for x in consecutive(y_pred_1):
+        plt.axvspan(x[0]-1,x[-1], facecolor='r', alpha=0.2)
+    
+    X_plot = np.moveaxis(X_test, -1, 0)[0:1,:,1].flatten()
+    len(X_plot)
+    
+    #plt.figure()
+    plt.plot(X_plot)
+    plt.show()
 
 #upper = value + bounds['EURUSD']
 #lower = value - bounds['EURUSD']
