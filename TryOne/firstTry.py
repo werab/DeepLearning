@@ -7,17 +7,25 @@ from datetime import datetime, timedelta
 
 
 _version = 0.5
-_epoch = 100
+_epoch = 2
 
 # todos:
 
-# regularisation
-## https://keras.io/regularizers/
-
 # param optimisation
 ## automatic testing
-## # https://keras.io/callbacks/
+## define stuff before testing
+##    - https://keras.io/callbacks/
+##      - propper result logging
+##      - earlyStopping
+##      - tensorboard
+##    - config logging
+##    - weights file
+##    - learning log
+##    - prediction result logging (good/bad/unknown)
 ## saved weights to paramnamed.save.file
+
+# predict on every epoch
+## https://stackoverflow.com/questions/36895627/python-keras-creating-a-callback-with-one-prediction-for-each-epoch
 
 # visual
 ## https://keras.io/visualization/
@@ -96,7 +104,8 @@ config = {
      'endTrain'               : endTrain,
      'endTest'                : endTest,
      'weekDeltaTrain'         : weekDeltaTrain,
-     'weekDeltaProve'         : weekDeltaProve
+     'weekDeltaProve'         : weekDeltaProve,
+     'l2RegularizeVal'        : 0.005 # 'None' to dectivate
 }
 
 
@@ -216,12 +225,14 @@ from keras.layers import Conv1D
 from keras.layers import MaxPooling1D
 from keras.layers import Flatten
 from keras.layers import Dense
+from keras.callbacks import TensorBoard
 from keras import regularizers
 from keras import initializers
 
 class Conf1DClassifier():
     def __init__(self, config, dataSetCount):
         self.lookback_batch = config['lookback_batch']
+        self.regVal = config['l2RegularizeVal']
         
         self.dataSetCount = dataSetCount
 
@@ -230,26 +241,26 @@ class Conf1DClassifier():
         classifier = Sequential()
         
         # Step 1 - Convolution
-        classifier.add(Conv1D(32, 9, input_shape = (self.lookback_batch, self.dataSetCount), 
+        classifier.add(Conv1D(32, 9, input_shape = (self.lookback_batch, self.dataSetCount),
                               activation = 'relu',
-                              dilation_rate = 1, 
-                              padding = 'causal'))
-    #                          kernel_regularizer = regularizers.l2(0.005),
-    #                          activity_regularizer = regularizers.l2(0.005)))
+                              dilation_rate = 1,
+                              padding = 'causal',
+                              kernel_regularizer = regularizers.l2(self.regVal),
+                              activity_regularizer = regularizers.l2(self.regVal)))
         # Step 2 - Pooling
         classifier.add(MaxPooling1D(pool_size = 2))
         
         # Adding a second convolutional layer
         classifier.add(Conv1D(32, 9, activation = 'relu',
-                              dilation_rate = 2, padding = 'causal'))
-    #                          kernel_regularizer = regularizers.l2(0.005),
-    #                          activity_regularizer = regularizers.l2(0.005)))
+                              dilation_rate = 2, padding = 'causal',
+                              kernel_regularizer = regularizers.l2(self.regVal),
+                              activity_regularizer = regularizers.l2(self.regVal)))
         classifier.add(MaxPooling1D(pool_size = 2))
         
         classifier.add(Conv1D(32, 9, activation = 'relu',
-                              dilation_rate = 4, padding = 'causal'))
-    #                          kernel_regularizer = regularizers.l2(0.005),
-    #                          activity_regularizer = regularizers.l2(0.005)))
+                              dilation_rate = 4, padding = 'causal',
+                              kernel_regularizer = regularizers.l2(self.regVal),
+                              activity_regularizer = regularizers.l2(self.regVal)))
         classifier.add(MaxPooling1D(pool_size = 2))
         
         # Step 3 - Flattening
@@ -268,14 +279,20 @@ conf1D = Conf1DClassifier(config, X_test.shape[2])
 
 classifier = conf1D.getClassifier()
 
+tensorBoard = TensorBoard(log_dir='./logs')
+
 if load_saved_weights:
     classifier.load_weights(load_weights_file)
 else:
-    classifier.fit(X_train, y_train,
+    hist = classifier.fit(X_train, y_train,
                    class_weight = cat_weights,
                    epochs = _epoch, 
-                   validation_split=0.2)
+                   validation_split=0.2,
+                   callbacks=[tensorBoard])
+    print(hist.history)
     classifier.save(save_weights)
+
+
 
 # Importing the Keras libraries and packages
 #from keras.models import Sequential
