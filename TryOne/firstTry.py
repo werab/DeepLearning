@@ -4,28 +4,39 @@ import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
 from datetime import datetime, timedelta
+from sklearn.metrics import confusion_matrix
 
 
 _version = 0.5
-_epoch = 2
+_epoch = 10
 
 # todos:
+
+# home / weekend
+## class split
+### classifier
+### predictor
+## result loggin
+### to csv / pickle
+### top acc / good 
 
 # param optimisation
 ## automatic testing
 ## define stuff before testing
 ##    - https://keras.io/callbacks/
 ##      - propper result logging
-##      - earlyStopping
-##      - tensorboard
+##      - earlyStopping -!!-
+##          - param optimization
+##      - tensorboard -!!-
+##          - param optimization
 ##    - config logging
-##    - weights file
+##    - weights file -!!-
 ##    - learning log
 ##    - prediction result logging (good/bad/unknown)
-## saved weights to paramnamed.save.file
+##    - general directory structure
 
-# predict on every epoch
-## https://stackoverflow.com/questions/36895627/python-keras-creating-a-callback-with-one-prediction-for-each-epoch
+# results/<base lvl>/<1th level>/<2nd lvl>
+# - csv / weights / tensorboard
 
 # visual
 ## https://keras.io/visualization/
@@ -56,7 +67,7 @@ _epoch = 2
 ## https://www.nature.com/articles/nature24270.epdf?author_access_token=VJXbVjaSHxFoctQQ4p2k4tRgN0jAjWel9jnR3ZoTv0PVW4gB86EEpGqTRDtpIz-2rmo8-KG06gqVobU5NSCFeHILHcVFUeMsbvwS-lxjqQGg98faovwjxeTUgZAUMnRQ
 
 
-load_saved_weights=True
+load_saved_weights=False
 load_weights_file = "H5/v0.5_ep100_weekDeltaTrain48.h5"
 
 # params
@@ -91,21 +102,24 @@ save_weights = "v%s_ep%s_weekDeltaTrain%s.h5" % (_version, _epoch, weekDeltaTrai
 #bounds = { 'EURUSD' : 0.0010 }
 
 config = {
-     'mainSymbol'             : 'EURUSD',
-     'indicatorSymbols'       : ['EURGBP', 'GBPUSD', 'USDJPY', 'EURJPY'],
-     'lookback_batch'         : 24*60,
-     'lookback_stepsize'      : 1,
-     'maxTimeDeltaAcceptance' : '1 days 1 hours',
-     'fileregex'              : fileregex,
-     'forward_set_lengh'      : 60,
-     'interpolateLimit'       : 60,
-     'bounds'                 : { 'EURUSD' : 0.0010 },
-     'beginTrain'             : beginTrain,
-     'endTrain'               : endTrain,
-     'endTest'                : endTest,
-     'weekDeltaTrain'         : weekDeltaTrain,
-     'weekDeltaProve'         : weekDeltaProve,
-     'l2RegularizeVal'        : 0.005 # 'None' to dectivate
+     'mainSymbol'             : 'EURUSD', # base lvl
+     'indicatorSymbols'       : ['EURGBP', 'GBPUSD', 'USDJPY', 'EURJPY'], # base lvl
+
+     'l2RegularizeVal'        : 0.005, # 'None' to dectivate # 1th lvl
+
+     'lookback_stepsize'      : 1, # 2nd lvl
+     'fileregex'              : fileregex, # 2nd lvl
+     'beginTrain'             : beginTrain, # 2nd lvl
+     'endTrain'               : endTrain, # 2nd lvl
+     'endTest'                : endTest, # 2nd lvl
+     'weekDeltaTrain'         : weekDeltaTrain, # 2nd lvl
+     'weekDeltaProve'         : weekDeltaProve, # 2nd lvl
+
+     'lookback_batch'         : 24*60, # const
+     'maxTimeDeltaAcceptance' : '1 days 1 hours', # const
+     'forward_set_lengh'      : 60, # const
+     'interpolateLimit'       : 60, # const
+     'bounds'                 : { 'EURUSD' : 0.0010 }, # const
 }
 
 
@@ -225,7 +239,6 @@ from keras.layers import Conv1D
 from keras.layers import MaxPooling1D
 from keras.layers import Flatten
 from keras.layers import Dense
-from keras.callbacks import TensorBoard
 from keras import regularizers
 from keras import initializers
 
@@ -279,7 +292,72 @@ conf1D = Conf1DClassifier(config, X_test.shape[2])
 
 classifier = conf1D.getClassifier()
 
-tensorBoard = TensorBoard(log_dir='./logs')
+
+
+
+
+
+class Predictor():
+    def __init__(self, cf, X_test, y_test, limit):
+        self.X_test = X_test
+        self.y_test = y_test
+        self.y_pred = cf.predict(X_test)
+        self.y_pred_i = np.argwhere(self.y_pred > limit)
+    
+    def getYPred(self):
+        return self.y_pred
+    
+    def getCM(self):
+        return confusion_matrix(np.array(self.y_test).argmax(axis=1), 
+                                self.y_pred.argmax(axis=1))
+
+    def getStatistics(self):
+        if len(self.y_pred_i) == 0:
+            return { 'good' : 0.0, 'bad' : 0.0, 'unknown' : 1.0 }
+        
+        y_pred_cond = np.take(self.y_pred, np.moveaxis(self.y_pred_i, 0, -1)[0], axis=0)
+        y_test_cond = np.take(self.y_test, np.moveaxis(self.y_pred_i, 0, -1)[0], axis=0)
+        cm_cond = confusion_matrix(np.array(y_test_cond).argmax(axis=1), y_pred_cond.argmax(axis=1))
+        
+        good = cm_cond[0][0] + cm_cond[1][1]
+        bad = cm_cond[1][0] + cm_cond[0][1]
+        unknown = cm_cond[0][2] + cm_cond[1][2]
+        sumall = good + bad + unknown
+        
+        return { 'good' : good/sumall, 'bad' : bad/sumall, 'unknown' : unknown/sumall }
+
+    def getUpArray(self):
+        return self.y_pred_i[np.where((self.y_pred_i[:,1] == 0))[0], :][:,0]
+    
+    def getDownArray(self):
+        return self.y_pred_i[np.where((self.y_pred_i[:,1] == 1))[0], :][:,0]
+
+from keras.callbacks import TensorBoard
+from keras.callbacks import EarlyStopping
+from keras.callbacks import ModelCheckpoint
+from keras.callbacks import Callback
+
+class PredictionHistory(Callback):
+    def __init__(self, X, Y, bound):
+        d = { 'good': [], 'bad': [], 'unknown': [], 'ypred': [] }
+        self.predhis = pd.DataFrame(data=d)
+        self.X_test = X
+        self.y_test = Y
+        self.bound = bound
+        
+    def on_epoch_end(self, epoch, logs={}):
+        p = Predictor(self.model, self.X_test, self.y_test, self.bound)
+        stats = p.getStatistics()
+        ypred = { "ypred" : p.getYPred()}
+        self.predhis = self.predhis.append({ **stats, **ypred}, ignore_index=True)
+    def getPredHist(self):
+        return self.predhis
+
+tb_callback = TensorBoard(log_dir='./logs')
+es_callback = EarlyStopping(monitor='val_loss', min_delta=0.005, verbose=1, patience=3)
+mc_callback = ModelCheckpoint("./logs/weights.{epoch:02d}-{acc:.4f}.hdf5", monitor='acc',save_best_only=True)
+ph_callback = PredictionHistory(X = X_test, Y = y_test, bound = 0.9)
+
 
 if load_saved_weights:
     classifier.load_weights(load_weights_file)
@@ -288,119 +366,40 @@ else:
                    class_weight = cat_weights,
                    epochs = _epoch, 
                    validation_split=0.2,
-                   callbacks=[tensorBoard])
+                   callbacks=[tb_callback, es_callback, mc_callback, ph_callback])
     print(hist.history)
     classifier.save(save_weights)
 
 
+df = pd.concat([ph_callback.getPredHist(), pd.DataFrame(hist.history)], axis=1)
 
-# Importing the Keras libraries and packages
-#from keras.models import Sequential
-#from keras.layers import Dense
-#from keras.layers import LSTM
-#from keras.layers import Dropout
 
-# Initialising the RNN
-#regressor = Sequential()
+df.to_csv(path_or_buf = './logs/test.csv', float_format = '%.3f', decimal = ',',
+         columns = ['acc', 'loss', 'val_acc', 'val_loss', 'good', 'bad', 'unknown'])
 
-# Adding the first LSTM layer and some Dropout regularisation
-#regressor.add(LSTM(units = 100, return_sequences = True, input_shape = (X_train.shape[1], 1),
-#                   name = "LSTM_layer_one"))
-#                   kernel_initializer = 'uniform', name = "LSTM_layer_one"))
-#regressor.add(Dropout(0.2))
-
-# Adding a second LSTM layer and some Dropout regularisation
-#regressor.add(LSTM(units = 100, return_sequences = True,
-#                   name = "LSTM_layer_two"))
-#                   kernel_initializer = 'uniform', name = "LSTM_layer_two"))
-#regressor.add(Dropout(0.2))
-
-# Adding a third LSTM layer and some Dropout regularisation
-#regressor.add(LSTM(units = 50, return_sequences = True,
-#                   name = "LSTM_layer_three"))
-#                   kernel_initializer = 'uniform', name = "LSTM_layer_three"))
-#regressor.add(Dropout(0.2))
-
-# Adding a fourth LSTM layer and some Dropout regularisation
-#regressor.add(LSTM(units = 50, name = "LSTM_layer_four"))
-#regressor.add(LSTM(units = 50, kernel_initializer = 'uniform', name = "LSTM_layer_four"))
-#regressor.add(Dropout(0.2))
-
-# Adding the output layer
-#regressor.add(Dense(units = 4))
-#regressor.add(Dense(units = 4, kernel_initializer = 'uniform'))
-
-# Compiling the RNN
-#regressor.compile(optimizer = 'rmsprop', loss = 'categorical_crossentropy', metrics = ['accuracy'])
-
-#if load_saved_weights:
-#    regressor.load_weights(save_weights)
-#else:
-    # Fitting the RNN to the Training set
-    #regressor.fit(X_train, y_train, epochs = 100, batch_size = 32)
-#    regressor.fit(X_train, y_train, epochs = 100, batch_size = 10)
-#    regressor.save(save_weights)
-
-# todo: nochmal durchgehen !!!
-#dataset_test = pd.read_csv('DAT_MT_EURUSD_M1_201711.csv', header=None)
-#dataset_test = dataset_test
-#real_forex = dataset_test.iloc[:, 1:2].values
-
-# Getting the predicted stock price of 2017
-#dataset_total = pd.concat((dataset_train[2], dataset_test[2]), axis = 0)
-#test_set = dataset_total[len(dataset_total) - len(dataset_test) - lookback_batch:].values
-
-    
-#test_set_scaled = test_set.reshape(-1,1) # nochmal nachschauen im Lehrgang
-#test_set_scaled = sc.transform(test_set_scaled)
-
-#X_test = []
-#y_test = []
-#for i in range(lookback_batch, len(test_set)-forward_set_lengh):
-#    X_test.append(test_set_scaled[i-lookback_batch:i, 0])
-#    y_test.append(getCategory(test_set[i], np.array(test_set[i+1:i+forward_set_lengh])))
-#    
-
-#X_test, y_test = getStructuredData(dataset_test, test_set, test_set_scaled)
-
-#X_test = np.array(X_test)
-#X_test = np.reshape(X_test, (X_test.shape[0], X_test.shape[1], 1))
-y_pred = classifier.predict(X_test)
+   
 
 # Making the Confusion Matrix
-from sklearn.metrics import confusion_matrix
-cm = confusion_matrix(np.array(y_test).argmax(axis=1), y_pred.argmax(axis=1))
+predictor = Predictor(classifier, X_test, y_test, 0.9)
+
+cm = predictor.getCM()
+
+predictor.getStatistics()
+
+# print("good: %.2f bad: %.2f unknown: %.2f" % (good/sumall, bad/sumall, unknown/sumall))
 
 
-y_pred_i = np.argwhere(y_pred > 0.9)
-
-y_pred_0 = y_pred_i[np.where((y_pred_i[:,1] == 0))[0], :][:,0]
-y_pred_1 = y_pred_i[np.where((y_pred_i[:,1] == 1))[0], :][:,0]
-
-np.moveaxis(y_pred_i, -1, 0)[0:1]
-
-y_pred_cond = np.take(y_pred, np.moveaxis(y_pred_i, 0, -1)[0], axis=0)
-y_test_cond = np.take(y_test, np.moveaxis(y_pred_i, 0, -1)[0], axis=0)
-cm_cond = confusion_matrix(np.array(y_test_cond).argmax(axis=1), y_pred_cond.argmax(axis=1))
-
-good = cm_cond[0][0] + cm_cond[1][1]
-bad = cm_cond[1][0] + cm_cond[0][1]
-unknown = cm_cond[0][2] + cm_cond[1][2]
-sumall = good + bad + unknown
-
-print("good: %.2f bad: %.2f unknown: %.2f" % (good/sumall, bad/sumall, unknown/sumall))
-
-result_view = np.hstack((y_pred, np.array(y_test).argmax(axis=1).reshape(-1,1)))
+result_view = np.hstack((predictor.getYPred(), np.array(y_test).argmax(axis=1).reshape(-1,1)))
 
 # View Plot
 def consecutive(data, stepsize=1):
     return np.split(data, np.where(np.diff(data) != stepsize)[0]+1)
 
 if load_saved_weights:
-    for x in consecutive(y_pred_0):
+    for x in consecutive(predictor.getUpArray()):
         plt.axvspan(x[0]-1,x[-1], facecolor='g', alpha=0.2)
     
-    for x in consecutive(y_pred_1):
+    for x in consecutive(predictor.getDownArray()):
         plt.axvspan(x[0]-1,x[-1], facecolor='r', alpha=0.2)
     
     X_plot = np.moveaxis(X_test, -1, 0)[0:1,:,1].flatten()
