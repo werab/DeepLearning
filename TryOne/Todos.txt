@@ -1,0 +1,53 @@
+
+## result loggin
+### to csv / pickle
+with open('/trainHistoryDict', 'wb') as file_pi:
+        pickle.dump(history.history, file_pi)
+### top acc / good 
+
+# param optimisation
+## automatic testing
+## define stuff before testing
+##    - https://keras.io/callbacks/
+##      - propper result logging
+##      - earlyStopping -!!-
+##          - param optimization
+##      - tensorboard -!!-
+##          - param optimization
+##    - config logging
+##    - weights file -!!-
+##    - learning log
+##    - prediction result logging (good/bad/unknown)
+##    - general directory structure
+
+# results/<base lvl>/<1th level>/<2nd lvl>
+# - csv / weights / tensorboard
+
+# visual
+## https://keras.io/visualization/
+
+# Conv2D specifications (cumute / work)
+## convolution window sizing
+
+# classifier.fit optimisation
+
+# general optimisation techniques
+## https://cambridgespark.com/content/tutorials/neural-networks-tuning-techniques/index.html
+
+# initialisation weights
+## https://arxiv.org/pdf/1703.04691.pdf
+## https://stackoverflow.com/questions/46798708/keras-how-to-view-initialized-weights-i-e-before-training
+
+# leaning rate scheduling
+# google search: keras learning rate decay
+## https://machinelearningmastery.com/using-learning-rate-schedules-deep-learning-models-python-keras/
+## https://github.com/keras-team/keras/issues/898
+
+# set categories with from sklearn.preprocessing import LabelEncoder, OneHotEncoder library
+## help https://machinelearningmastery.com/how-to-one-hot-encode-sequence-data-in-python/
+
+# course from marco
+## https://www.coursera.org/learn/machine-learning
+# go article
+## https://www.nature.com/articles/nature24270.epdf?author_access_token=VJXbVjaSHxFoctQQ4p2k4tRgN0jAjWel9jnR3ZoTv0PVW4gB86EEpGqTRDtpIz-2rmo8-KG06gqVobU5NSCFeHILHcVFUeMsbvwS-lxjqQGg98faovwjxeTUgZAUMnRQ
+

@@ -79,12 +79,14 @@ class DataSet():
     # file used as filter (for testing)
     def loadSymbolCSV(self, symbol, file='*'):
         df = None
-        for file in glob.glob("%s/%s" % (symbol, file)):
-            print("Load: ", file)
-            next_df = pd.read_csv(file, header=None, index_col = 'datetime',
-                             parse_dates={'datetime': [0, 1]}, 
-                             date_parser=self.dateparse)
-            df = pd.concat([df, next_df])
+        
+        for year in np.arange(self.beginTrain.year, self.endTest.year+1):
+            for file in glob.glob("INPUT_DATA/%s/*%s*" % (symbol, year)):
+                print("Load: ", file)
+                next_df = pd.read_csv(file, header=None, index_col = 'datetime',
+                                 parse_dates={'datetime': [0, 1]}, 
+                                 date_parser=self.dateparse)
+                df = pd.concat([df, next_df])
         return df
 
     def getXYArrays(self, datasetTrain, datasetTest):
