@@ -13,7 +13,6 @@ class DataSet():
         self.lookback_batch         = config['lookback_batch']
         self.lookback_stepsize      = config['lookback_stepsize']
         self.maxTimeDeltaAcceptance = config['maxTimeDeltaAcceptance']
-        self.fileregex              = config['fileregex']
         self.interpolateLimit       = config['interpolateLimit']
         self.forward_set_lengh      = config['forward_set_lengh']
         self.bounds                 = config['bounds']
@@ -76,8 +75,7 @@ class DataSet():
         return x, y
 
     # symbol matches directory
-    # file used as filter (for testing)
-    def loadSymbolCSV(self, symbol, file='*'):
+    def loadSymbolCSV(self, symbol):
         df = None
         
         for year in np.arange(self.beginTrain.year, self.endTest.year+1):
@@ -142,13 +140,13 @@ class DataSet():
     
         return X_train, y_train, X_test, y_test
 
-    def getDataForSymbol(self, symbol, fileregex):
+    def getDataForSymbol(self, symbol):
         # parse 0/1 column to datetime column
         dataset_raw = None
         try:
-            dataset_raw = self.loadSymbolCSV(symbol, fileregex).sort_index()
+            dataset_raw = self.loadSymbolCSV(symbol).sort_index()
         except:
-            print("missing data for symbol %s for regex '%s' 0 rows found." % (symbol, fileregex))
+            print("missing data for symbol %s for year range %s - %s, 0 rows found." % (symbol, self.beginTrain.year, self.endTest.year))
             raise
         
         dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='quadratic', limit=self.interpolateLimit).dropna()
