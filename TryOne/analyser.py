@@ -27,9 +27,11 @@ def getTestData(config, useTrainData):
 
     return X_test, y_test
 
-classifier = load_model("./results/EURUSD/firstTry/2016-07-26_6-3/savedModels/weights.03-0.3057.hdf5")
+#classifier = load_model("./results/EURUSD/firstTry/2016-07-26_6-3/savedModels/weights.03-0.3057.hdf5")
+classifier = load_model("./results/weights.04-0.5332.hdf5")
 
-config = pickle.load(open("./results/EURUSD/firstTry/2016-07-26_6-3/config.pickle", "rb"))
+#config = pickle.load(open("./results/EURUSD/firstTry/2016-07-26_6-3/config.pickle", "rb"))
+config = pickle.load(open("./results/config.pickle", "rb"))
 
 X_test, y_test = getTestData(config, False)
 

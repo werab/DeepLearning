@@ -88,6 +88,9 @@ def execute(config, useTrainData):
     classifier = conf1D.getClassifier(X_test.shape[2], cat_count)
 
     tbDir, smDir = createDirs(config['resultPath'])
+    
+    with open(os.path.join(config['resultPath'], "config.pickle"), 'wb') as configFile:
+        pickle.dump(config, configFile)
 
     tb_callback = TensorBoard(log_dir=tbDir)
     es_callback = EarlyStopping(monitor='acc', min_delta=0.005, verbose=1, patience=3)
@@ -103,10 +106,7 @@ def execute(config, useTrainData):
     resultSet = pd.concat([ph_callback.getPredHist(), pd.DataFrame(hist.history)], axis=1)
     resultSet.to_csv(path_or_buf = os.path.join(config['resultPath'], "predict.csv"), float_format = '%.3f', decimal = ',',
              columns = ['acc', 'loss', 'val_acc', 'val_loss', 'good', 'bad', 'unknown'])
-    
-    with open(os.path.join(config['resultPath'], "config.pickle"), 'wb') as configFile:
-        pickle.dump(config, configFile)
-    
+
     return hist.history
 
 secndLvlTestSet = { 'date': [], 'trainWeeks': [], 'stepsize': []}
