@@ -1,10 +1,9 @@
 # -*- coding: utf-8 -*-
 
-import numpy as np
-import matplotlib.pyplot as plt
 import pandas as pd
 import pathlib
 import os
+import pickle
 from datetime import datetime, timedelta
 
 from keras.callbacks import TensorBoard
@@ -13,28 +12,21 @@ from keras.callbacks import ModelCheckpoint
 
 from preprocessing.dataSet import DataSet
 from classifier.CNN.Conf1DClassifier import Conf1DClassifier
-from predictor.Predictor import Predictor
 from classifier.PredictionHistory import PredictionHistory
+from misc.helper import calcCategories
 
 _version = 0.5
-_epoch = 3
-weekDeltaProve = 2
+_epoch = 20
+weekDeltaProve = 1
 
-
-load_saved_weights=False
-load_weights_file = "H5/v0.5_ep100_weekDeltaTrain48.h5"
-
-#weekDeltaTrain = 48
-
-#endTrain = datetime(2018,1,14) # year, month, day
 useTrainData = True
 
 # results/<base lvl>/<1th level>/<2nd lvl>
 
 config = {
      'mainSymbol'             : 'EURUSD', # base lvl
-#     'indicatorSymbols'       : ['EURGBP', 'GBPUSD', 'USDJPY', 'EURJPY'], # base lvl
-     'indicatorSymbols'       : ['EURGBP'], # base lvl
+     'indicatorSymbols'       : ['EURGBP', 'GBPUSD', 'USDJPY', 'EURJPY'], # base lvl
+#     'indicatorSymbols'       : ['EURGBP'], # base lvl
 
      'l2RegularizeVal'        : 0.005, # 'None' to dectivate # 1th lvl
 
@@ -57,17 +49,7 @@ config = {
 # np.stack(np.meshgrid([1, 2, 3], [4, 5], [6, 7]), -1).reshape(-1, 3)
 
 
-def calcCategories(y_train):
-    cat_count = [0,0,0]
-    for a in y_train:
-        cat_count += a
-    
-    # equal class distribution
-    cat_weights = {}
-    for idx, cat_class in enumerate(cat_count):
-        cat_weights[idx] = round(np.max(cat_count)/cat_class)
-        
-    return cat_count, cat_weights
+
 
 ############
 #   Main   #
@@ -109,7 +91,7 @@ def execute(config, useTrainData):
 
     tb_callback = TensorBoard(log_dir=tbDir)
     es_callback = EarlyStopping(monitor='acc', min_delta=0.005, verbose=1, patience=3)
-    mc_callback = ModelCheckpoint(smDir + "/weights.{epoch:02d}-{acc:.4f}.hdf5", monitor='acc',save_best_only=True)
+    mc_callback = ModelCheckpoint(smDir + "/weights.{epoch:02d}-{acc:.4f}.hdf5", monitor='acc',save_best_only=False)
     ph_callback = PredictionHistory(X = X_test, Y = y_test, bound = 0.9)
 
     hist = classifier.fit(X_train, y_train,
@@ -122,13 +104,16 @@ def execute(config, useTrainData):
     resultSet.to_csv(path_or_buf = os.path.join(config['resultPath'], "predict.csv"), float_format = '%.3f', decimal = ',',
              columns = ['acc', 'loss', 'val_acc', 'val_loss', 'good', 'bad', 'unknown'])
     
+    with open(os.path.join(config['resultPath'], "config.pickle"), 'wb') as configFile:
+        pickle.dump(config, configFile)
+    
     return hist.history
 
 secndLvlTestSet = { 'date': [], 'trainWeeks': [], 'stepsize': []}
 secndLvlTestSet = pd.DataFrame(data=secndLvlTestSet)
-secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2016,7,26), 'trainWeeks': 2,   'stepsize': 1 }, ignore_index=True)
-secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2016,7,26), 'trainWeeks': 2*2, 'stepsize': 2 }, ignore_index=True)
-secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2016,7,26), 'trainWeeks': 2*3, 'stepsize': 3 }, ignore_index=True)
+secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2016,10,30), 'trainWeeks': 8,   'stepsize': 1 }, ignore_index=True)
+secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2016,10,30), 'trainWeeks': 16, 'stepsize': 1 }, ignore_index=True)
+secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2016,10,30), 'trainWeeks': 32, 'stepsize': 1 }, ignore_index=True)
 
 for i, row in secndLvlTestSet.iterrows():
     print(i, ":", row['date'], row['trainWeeks'], int(row['stepsize']))
@@ -143,7 +128,10 @@ for i, row in secndLvlTestSet.iterrows():
     config['lookback_stepsize'] = int(row['stepsize'])
 
     config['resultPath'] = "results/%s/firstTry/%s_%s-%s" % (config['mainSymbol'], row['date'].strftime("%Y-%m-%d"), 
-                row['trainWeeks'], config['lookback_stepsize'])
+                int(row['trainWeeks']), config['lookback_stepsize'])
     
-    hist = execute(config, useTrainData)
-    print(hist)
+    if os.path.exists(config['resultPath']):
+        print ("Path %s already exists" % (config['resultPath']))
+    else:
+        hist = execute(config, useTrainData)
+        print(hist)
