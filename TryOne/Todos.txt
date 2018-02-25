@@ -1,8 +1,5 @@
 
 ## result loggin
-## fix confution matrix
-## save confusion matix ?
-## regularisation problem fix
 ### top acc / good 
 
 # param optimisation
@@ -11,14 +8,14 @@
 ##    - https://keras.io/callbacks/
 ##      - propper result logging
 ##      - earlyStopping -!!-
-##          - param optimization
+##          - loss? / val_acc? / val_loss?
 ##      - tensorboard -!!-
 ##          - param optimization
-##    - config logging
-##    - weights file -!!-
 ##    - learning log
-##    - prediction result logging (good/bad/unknown)
-##    - general directory structure
+
+# regularisation
+## kernel_regularizer? / bias_regularizer? / activity_regularizer?
+# http://neuralnetworksanddeeplearning.com/chap3.html#overfitting_and_regularization
 
 # results/<base lvl>/<1th level>/<2nd lvl>
 # - csv / weights / tensorboard

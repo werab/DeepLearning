@@ -5,6 +5,7 @@ from keras.layers import Conv1D
 from keras.layers import MaxPooling1D
 from keras.layers import Flatten
 from keras.layers import Dense
+from keras import regularizers
 
 class Conf1DClassifier():
     def __init__(self, config):
@@ -19,22 +20,22 @@ class Conf1DClassifier():
         classifier.add(Conv1D(32, 9, input_shape = (self.lookback_batch, dataSetCount),
                               activation = 'relu',
                               dilation_rate = 1,
-                              padding = 'causal'))#,
-                              #kernel_regularizer = regularizers.l2(self.regVal),
+                              padding = 'causal',
+                              kernel_regularizer = regularizers.l2(self.regVal)))#
                               #activity_regularizer = regularizers.l2(self.regVal)))
         # Step 2 - Pooling
         classifier.add(MaxPooling1D(pool_size = 2))
         
         # Adding a second convolutional layer
         classifier.add(Conv1D(32, 9, activation = 'relu',
-                              dilation_rate = 2, padding = 'causal'))#,
-                              #kernel_regularizer = regularizers.l2(self.regVal),
+                              dilation_rate = 2, padding = 'causal',
+                              kernel_regularizer = regularizers.l2(self.regVal))),
                               #activity_regularizer = regularizers.l2(self.regVal)))
         classifier.add(MaxPooling1D(pool_size = 2))
         
         classifier.add(Conv1D(32, 9, activation = 'relu',
-                              dilation_rate = 4, padding = 'causal'))#,
-                              #kernel_regularizer = regularizers.l2(self.regVal),
+                              dilation_rate = 4, padding = 'causal',
+                              kernel_regularizer = regularizers.l2(self.regVal))),
                               #activity_regularizer = regularizers.l2(self.regVal)))
         classifier.add(MaxPooling1D(pool_size = 2))
         

@@ -23,14 +23,17 @@ class Predictor():
         
         y_pred_cond = np.take(self.y_pred, np.moveaxis(self.y_pred_i, 0, -1)[0], axis=0)
         y_test_cond = np.take(self.y_test, np.moveaxis(self.y_pred_i, 0, -1)[0], axis=0)
-        cm_cond = confusion_matrix(np.array(y_test_cond).argmax(axis=1), y_pred_cond.argmax(axis=1))
+        cm_cond = confusion_matrix(np.array(y_test_cond).argmax(axis=1), 
+                                   y_pred_cond.argmax(axis=1), labels=[0,1,2])
         
         good = cm_cond[0][0] + cm_cond[1][1]
         bad = cm_cond[1][0] + cm_cond[0][1]
         unknown = cm_cond[0][2] + cm_cond[1][2]
         sumall = good + bad + unknown
         
-        return { 'good' : good/sumall, 'bad' : bad/sumall, 'unknown' : unknown/sumall }
+        return { 'good'    : 0 if good    == 0 else good/sumall, 
+                 'bad'     : 0 if bad     == 0 else bad/sumall, 
+                 'unknown' : 0 if unknown == 0 else unknown/sumall }
 
     def getUpArray(self):
         return self.y_pred_i[np.where((self.y_pred_i[:,1] == 0))[0], :][:,0]

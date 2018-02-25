@@ -42,6 +42,7 @@ cm = predictor.getCM()
 
 predictor.getStatistics()
 
+
 # print("good: %.2f bad: %.2f unknown: %.2f" % (good/sumall, bad/sumall, unknown/sumall))
 
 

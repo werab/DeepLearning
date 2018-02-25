@@ -16,7 +16,7 @@ from classifier.PredictionHistory import PredictionHistory
 from misc.helper import calcCategories
 
 _version = 0.5
-_epoch = 20
+_epoch = 5
 weekDeltaProve = 1
 
 useTrainData = True
@@ -28,7 +28,7 @@ config = {
      'indicatorSymbols'       : ['EURGBP', 'GBPUSD', 'USDJPY', 'EURJPY'], # base lvl
 #     'indicatorSymbols'       : ['EURGBP'], # base lvl
 
-     'l2RegularizeVal'        : 0.005, # 'None' to dectivate # 1th lvl
+     'l2RegularizeVal'        : 0.001, # 'None' to dectivate # 1th lvl
 
 #     'lookback_stepsize'      : 1, # 2nd lvl
 #     'beginTrain'             : beginTrain, # 2nd lvl
@@ -92,9 +92,12 @@ def execute(config, useTrainData):
     with open(os.path.join(config['resultPath'], "config.pickle"), 'wb') as configFile:
         pickle.dump(config, configFile)
 
+    with open(os.path.join(config['resultPath'], "catCount.pickle"), 'wb') as catCountFile:
+        pickle.dump(cat_count, catCountFile)
+
     tb_callback = TensorBoard(log_dir=tbDir)
-    es_callback = EarlyStopping(monitor='acc', min_delta=0.005, verbose=1, patience=3)
-    mc_callback = ModelCheckpoint(smDir + "/weights.{epoch:02d}-{acc:.4f}.hdf5", monitor='acc',save_best_only=False)
+    es_callback = EarlyStopping(monitor='loss', min_delta=0.005, verbose=1, patience=5)
+    mc_callback = ModelCheckpoint(smDir + "/weights.{epoch:02d}-{acc:.4f}.hdf5", monitor='acc')
     ph_callback = PredictionHistory(X = X_test, Y = y_test, bound = 0.9)
 
     hist = classifier.fit(X_train, y_train,
@@ -112,8 +115,8 @@ def execute(config, useTrainData):
 secndLvlTestSet = { 'date': [], 'trainWeeks': [], 'stepsize': []}
 secndLvlTestSet = pd.DataFrame(data=secndLvlTestSet)
 secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2016,10,30), 'trainWeeks': 8,   'stepsize': 1 }, ignore_index=True)
-secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2016,10,30), 'trainWeeks': 16, 'stepsize': 1 }, ignore_index=True)
-secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2016,10,30), 'trainWeeks': 32, 'stepsize': 1 }, ignore_index=True)
+#secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2016,10,30), 'trainWeeks': 16, 'stepsize': 1 }, ignore_index=True)
+#secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2016,10,30), 'trainWeeks': 32, 'stepsize': 1 }, ignore_index=True)
 
 for i, row in secndLvlTestSet.iterrows():
     print(i, ":", row['date'], row['trainWeeks'], int(row['stepsize']))
