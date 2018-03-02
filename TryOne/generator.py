@@ -16,7 +16,7 @@ from classifier.PredictionHistory import PredictionHistory
 from misc.helper import calcCategories
 
 _version = 0.5
-_epoch = 5
+_epoch = 100
 weekDeltaProve = 1
 
 useTrainData = True
@@ -28,7 +28,11 @@ config = {
      'indicatorSymbols'       : ['EURGBP', 'GBPUSD', 'USDJPY', 'EURJPY'], # base lvl
 #     'indicatorSymbols'       : ['EURGBP'], # base lvl
 
-     'l2RegularizeVal'        : 0.001, # 'None' to dectivate # 1th lvl
+#     'l2RegularizeVal'        : 0.001, # 'None' to dectivate # 1th lvl
+#     'kernel_size'             : 9,
+     'maxPooling'              : True,
+#     'maxPoolingSize'          : 2,
+#     'optimizer'               : 'adam',
 
 #     'lookback_stepsize'      : 1, # 2nd lvl
 #     'beginTrain'             : beginTrain, # 2nd lvl
@@ -36,6 +40,7 @@ config = {
 #     'endTest'                : endTest, # 2nd lvl
 #     'weekDeltaTrain'         : weekDeltaTrain, # 2nd lvl
 #     'weekDeltaProve'         : weekDeltaProve, # 2nd lvl
+
 
      'lookback_batch'         : 24*60, # const
      'maxTimeDeltaAcceptance' : '1 days 1 hours', # const
@@ -45,10 +50,16 @@ config = {
 }
 
 
+l2RegVals_Options = [0.001, 0.01]
+kernel_size_Options = [7, 9, 12, 15]
+maxPoolingSize_Options = [2, 4]
+optimizer_Options = ['adam', 'sgd', 'rmsprop', 'adagrad']
+
 # permutation helper
 # np.stack(np.meshgrid([1, 2, 3], [4, 5], [6, 7]), -1).reshape(-1, 3)
-
-
+import numpy as np
+firstLvlTestSet = np.stack(np.meshgrid(kernel_size_Options, optimizer_Options, 
+                                     maxPoolingSize_Options, l2RegVals_Options), -1).reshape(-1, 4)
 
 
 ############
@@ -66,37 +77,19 @@ def createDirs(base):
     
     return tbDir, smDir
 
-def execute(config, useTrainData):
-    dataSet = DataSet(config, useTrainData)
-    trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'])
-
-    for sym in config['indicatorSymbols']:
-        _train, _test = dataSet.getDataForSymbol(sym)
-    
-        trainSetRAW = pd.concat([trainSetRAW, _train], axis=1, join_axes=[trainSetRAW.index])
-        testSetRAW = pd.concat([testSetRAW, _test], axis=1, join_axes=[testSetRAW.index])
-
-    trainSetRAW = trainSetRAW.dropna()
-    testSetRAW = testSetRAW.dropna()
-
-    X_train, y_train, X_test, y_test = dataSet.getXYArrays(trainSetRAW, testSetRAW)
-
-    cat_count, cat_weights = calcCategories(y_train)
+def execute(config, X_train, y_train, X_test, y_test, cat_count, useTrainData):
 
     conf1D = Conf1DClassifier(config)
 
-    classifier = conf1D.getClassifier(X_test.shape[2], cat_count)
+    classifier = conf1D.getClassifier(X_test.shape[2])
 
     tbDir, smDir = createDirs(config['resultPath'])
     
     with open(os.path.join(config['resultPath'], "config.pickle"), 'wb') as configFile:
         pickle.dump(config, configFile)
 
-    with open(os.path.join(config['resultPath'], "catCount.pickle"), 'wb') as catCountFile:
-        pickle.dump(cat_count, catCountFile)
-
     tb_callback = TensorBoard(log_dir=tbDir)
-    es_callback = EarlyStopping(monitor='loss', min_delta=0.005, verbose=1, patience=5)
+    es_callback = EarlyStopping(monitor='val_loss', min_delta=0.001, verbose=1, patience=20)
     mc_callback = ModelCheckpoint(smDir + "/weights.{epoch:02d}-{acc:.4f}.hdf5", monitor='acc')
     ph_callback = PredictionHistory(X = X_test, Y = y_test, bound = 0.9)
 
@@ -114,9 +107,8 @@ def execute(config, useTrainData):
 
 secndLvlTestSet = { 'date': [], 'trainWeeks': [], 'stepsize': []}
 secndLvlTestSet = pd.DataFrame(data=secndLvlTestSet)
-secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2016,10,30), 'trainWeeks': 8,   'stepsize': 1 }, ignore_index=True)
-#secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2016,10,30), 'trainWeeks': 16, 'stepsize': 1 }, ignore_index=True)
-#secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2016,10,30), 'trainWeeks': 32, 'stepsize': 1 }, ignore_index=True)
+secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2017,12,10), 'trainWeeks': 52, 'stepsize': 1 }, ignore_index=True)
+
 
 for i, row in secndLvlTestSet.iterrows():
     print(i, ":", row['date'], row['trainWeeks'], int(row['stepsize']))
@@ -129,12 +121,41 @@ for i, row in secndLvlTestSet.iterrows():
     config['endTest'] = endTest
     
     config['lookback_stepsize'] = int(row['stepsize'])
-
-    config['resultPath'] = "results/%s/firstTry/%s_%s-%s" % (config['mainSymbol'], row['date'].strftime("%Y-%m-%d"), 
-                int(row['trainWeeks']), config['lookback_stepsize'])
     
-    if os.path.exists(config['resultPath']):
-        print ("Path %s already exists" % (config['resultPath']))
-    else:
-        hist = execute(config, useTrainData)
-        print(hist)
+    dataSet = DataSet(config, useTrainData)
+    trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'])
+
+    for sym in config['indicatorSymbols']:
+        _train, _test = dataSet.getDataForSymbol(sym)
+    
+        trainSetRAW = pd.concat([trainSetRAW, _train], axis=1, join_axes=[trainSetRAW.index])
+        testSetRAW = pd.concat([testSetRAW, _test], axis=1, join_axes=[testSetRAW.index])
+
+    trainSetRAW = trainSetRAW.dropna()
+    testSetRAW = testSetRAW.dropna()
+
+    X_train, y_train, X_test, y_test = dataSet.getXYArrays(trainSetRAW, testSetRAW)
+
+    cat_count, cat_weights = calcCategories(y_train)
+    
+    sndLvlResultPath = "results/%s/%s_%s-%s" % (config['mainSymbol'],
+              row['date'].strftime("%Y-%m-%d"), int(row['trainWeeks']), config['lookback_stepsize'])
+    pathlib.Path(sndLvlResultPath).mkdir(parents=True, exist_ok=True)
+    
+    with open(os.path.join(sndLvlResultPath, "catCount.pickle"), 'wb') as catCountFile:
+        pickle.dump(cat_count, catCountFile)
+    
+    for testSet in firstLvlTestSet:
+        config['l2RegularizeVal'] = float(testSet[3])
+        config['kernel_size']     = int(testSet[0])
+        config['maxPoolingSize']  = int(testSet[2])
+        config['optimizer']       = testSet[1]
+
+        config['resultPath'] = "%s/%s_%s_%s_%s" % (sndLvlResultPath, config['optimizer'],
+               config['kernel_size'], config['maxPoolingSize'], config['l2RegularizeVal'])
+        
+        if os.path.exists(config['resultPath']):
+            print ("Path %s already exists" % (config['resultPath']))
+        else:
+            hist = execute(config, X_train, y_train, X_test, y_test, cat_count, useTrainData)
+            print(hist)
