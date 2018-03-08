@@ -27,8 +27,7 @@ class Conf1DClassifier():
                               activation = 'relu',
                               dilation_rate = 1,
                               padding = 'causal',
-                              kernel_regularizer = regularizers.l2(self.regVal)))#
-                              #activity_regularizer = regularizers.l2(self.regVal)))
+                              kernel_regularizer = regularizers.l2(self.regVal)))
         # Step 2 - Pooling
         if self.maxPooling:
             classifier.add(MaxPooling1D(pool_size = self.maxPoolingSize))
@@ -36,15 +35,15 @@ class Conf1DClassifier():
         # Adding a second convolutional layer
         classifier.add(Conv1D(32, self.kernel_size, activation = 'relu',
                               dilation_rate = 2, padding = 'causal',
-                              kernel_regularizer = regularizers.l2(self.regVal))),
-                              #activity_regularizer = regularizers.l2(self.regVal)))
+                              kernel_regularizer = regularizers.l2(self.regVal)))
+
         if self.maxPooling:
             classifier.add(MaxPooling1D(pool_size = self.maxPoolingSize))
         
         classifier.add(Conv1D(32, self.kernel_size, activation = 'relu',
                               dilation_rate = 4, padding = 'causal',
                               kernel_regularizer = regularizers.l2(self.regVal))),
-                              #activity_regularizer = regularizers.l2(self.regVal)))
+
         if self.maxPooling:
             classifier.add(MaxPooling1D(pool_size = self.maxPoolingSize))
         

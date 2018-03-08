@@ -13,6 +13,10 @@
 ##          - param optimization
 ##    - learning log
 
+# additional information
+# https://www.linkedin.com/pulse/python-tutorial-bollinger-bands-andrew-hamlet
+# https://www.linkedin.com/pulse/python-tutorial-macd-moving-average-andrew-hamlet
+
 # regularisation
 ## kernel_regularizer? / bias_regularizer? / activity_regularizer?
 # http://neuralnetworksanddeeplearning.com/chap3.html#overfitting_and_regularization
@@ -31,6 +35,9 @@
 # general optimisation techniques
 ## https://cambridgespark.com/content/tutorials/neural-networks-tuning-techniques/index.html
 
+# general overview
+## http://neuralnetworksanddeeplearning.com/chap3.html#overfitting_and_regularization
+
 # initialisation weights
 ## https://arxiv.org/pdf/1703.04691.pdf
 ## https://stackoverflow.com/questions/46798708/keras-how-to-view-initialized-weights-i-e-before-training
@@ -47,4 +54,5 @@
 ## https://www.coursera.org/learn/machine-learning
 # go article
 ## https://www.nature.com/articles/nature24270.epdf?author_access_token=VJXbVjaSHxFoctQQ4p2k4tRgN0jAjWel9jnR3ZoTv0PVW4gB86EEpGqTRDtpIz-2rmo8-KG06gqVobU5NSCFeHILHcVFUeMsbvwS-lxjqQGg98faovwjxeTUgZAUMnRQ
+
 

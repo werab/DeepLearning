@@ -11,7 +11,7 @@ from keras.callbacks import EarlyStopping
 from keras.callbacks import ModelCheckpoint
 
 from preprocessing.dataSet import DataSet
-from classifier.CNN.Conf1DClassifier import Conf1DClassifier
+from classifier.CNN.Conf1DClassifier02 import Conf1DClassifier
 from classifier.PredictionHistory import PredictionHistory
 from misc.helper import calcCategories
 
@@ -25,10 +25,11 @@ useTrainData = True
 
 config = {
      'mainSymbol'             : 'EURUSD', # base lvl
-     'indicatorSymbols'       : ['EURGBP', 'GBPUSD', 'USDJPY', 'EURJPY'], # base lvl
+#     'indicatorSymbols'       : ['EURGBP', 'GBPUSD', 'USDJPY', 'EURJPY'], # base lvl
+     'indicatorSymbols'       : ['EURGBP', 'EURJPY'], # base lvl
 #     'indicatorSymbols'       : ['EURGBP'], # base lvl
 
-#     'l2RegularizeVal'        : 0.001, # 'None' to dectivate # 1th lvl
+     'l2RegularizeVal'        : 0.001, # 'None' to dectivate # 1th lvl
 #     'kernel_size'             : 9,
      'maxPooling'              : True,
 #     'maxPoolingSize'          : 2,
@@ -50,7 +51,7 @@ config = {
 }
 
 
-l2RegVals_Options = [0.001, 0.01]
+#l2RegVals_Options = [0.001, 0.01]
 kernel_size_Options = [7, 9, 12, 15]
 maxPoolingSize_Options = [2, 4]
 optimizer_Options = ['adam', 'sgd', 'rmsprop', 'adagrad']
@@ -59,7 +60,7 @@ optimizer_Options = ['adam', 'sgd', 'rmsprop', 'adagrad']
 # np.stack(np.meshgrid([1, 2, 3], [4, 5], [6, 7]), -1).reshape(-1, 3)
 import numpy as np
 firstLvlTestSet = np.stack(np.meshgrid(kernel_size_Options, optimizer_Options, 
-                                     maxPoolingSize_Options, l2RegVals_Options), -1).reshape(-1, 4)
+                                     maxPoolingSize_Options), -1).reshape(-1, 3)
 
 
 ############
@@ -146,13 +147,14 @@ for i, row in secndLvlTestSet.iterrows():
         pickle.dump(cat_count, catCountFile)
     
     for testSet in firstLvlTestSet:
-        config['l2RegularizeVal'] = float(testSet[3])
+#        config['l2RegularizeVal'] = float(testSet[3])
         config['kernel_size']     = int(testSet[0])
         config['maxPoolingSize']  = int(testSet[2])
         config['optimizer']       = testSet[1]
 
         config['resultPath'] = "%s/%s_%s_%s_%s" % (sndLvlResultPath, config['optimizer'],
                config['kernel_size'], config['maxPoolingSize'], config['l2RegularizeVal'])
+        print("generating result for %s" % config['resultPath'])
         
         if os.path.exists(config['resultPath']):
             print ("Path %s already exists" % (config['resultPath']))
