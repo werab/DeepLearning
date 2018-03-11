@@ -108,7 +108,7 @@ def execute(config, X_train, y_train, X_test, y_test, cat_count, useTrainData):
 
 secndLvlTestSet = { 'date': [], 'trainWeeks': [], 'stepsize': []}
 secndLvlTestSet = pd.DataFrame(data=secndLvlTestSet)
-secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2017,12,10), 'trainWeeks': 52, 'stepsize': 1 }, ignore_index=True)
+secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2017,12,10), 'trainWeeks': 2, 'stepsize': 1 }, ignore_index=True)
 
 
 for i, row in secndLvlTestSet.iterrows():
@@ -125,6 +125,28 @@ for i, row in secndLvlTestSet.iterrows():
     
     dataSet = DataSet(config, useTrainData)
     trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'])
+    
+    ## testing 
+    
+    from sklearn.preprocessing import MinMaxScaler
+    
+    trainSetRAW['26 ema'] = trainSetRAW["EURUSD"].ewm(span=26).mean()
+    trainSetRAW['12 ema'] = trainSetRAW["EURUSD"].ewm(span=12).mean()
+    trainSetRAW['MACD'] = (trainSetRAW['12 ema'] - trainSetRAW['26 ema'])
+    
+    sc = MinMaxScaler(feature_range = (-1, 1))
+    trainSetRAW["MACD scaled"] = sc.fit_transform(trainSetRAW[['MACD']])
+    
+    import matplotlib.pyplot as plt
+    
+    plt.plot(trainSetRAW["EURUSD"], 'g')
+    plt.plot(trainSetRAW["26 ema"], 'b')
+    plt.plot(trainSetRAW["12 ema"], 'r')
+    plt.plot(trainSetRAW["MACD"], 'r')
+    plt.plot(trainSetRAW["MACD scaled"], 'r')
+    plt.show()
+    
+    ## end
 
     for sym in config['indicatorSymbols']:
         _train, _test = dataSet.getDataForSymbol(sym)
