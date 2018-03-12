@@ -141,8 +141,11 @@ for i, row in secndLvlTestSet.iterrows():
     # BB
     trainSetRAW['20 ma'] = trainSetRAW['EURUSD'].rolling(20).mean()
     trainSetRAW['20 sd'] = trainSetRAW['EURUSD'].rolling(20).std()
-    trainSetRAW['Upper Band'] = trainSetRAW['20 ma'] + (trainSetRAW['20 sd']*2)
-    trainSetRAW['Lower Band'] = trainSetRAW['20 ma'] - (trainSetRAW['20 sd']*2)
+#    trainSetRAW['Upper Band'] = trainSetRAW['20 ma'] + (trainSetRAW['20 sd']*2)
+#    trainSetRAW['Lower Band'] = trainSetRAW['20 ma'] - (trainSetRAW['20 sd']*2)
+
+    trainSetRAW['Upper Band'] = trainSetRAW['20 sd']*2
+    trainSetRAW['Lower Band'] = trainSetRAW['20 sd']*-2
     
     # RSI
     period = 14
@@ -158,7 +161,7 @@ for i, row in secndLvlTestSet.iterrows():
     rs = u.ewm(com=period-1, adjust=False).mean() / d.ewm(com=period-1, adjust=False).mean()
     rsi = 100 - 100 / (1 + rs)
     trainSetRAW['RSI'] = rsi
-    trainSetRAW["RSI scaled"] = rsi / 100
+    trainSetRAW["RSI scaled"] = (rsi - 50) / 100
     
     import matplotlib.pyplot as plt
     
@@ -167,6 +170,14 @@ for i, row in secndLvlTestSet.iterrows():
     plt.plot(trainSetRAW["12 ema"], 'r')
     plt.plot(trainSetRAW["MACD"], 'r')
     plt.plot(trainSetRAW["MACD scaled"], 'r')
+    
+    plt.plot(trainSetRAW["20 ma"], 'b')
+    plt.plot(trainSetRAW["Upper Band"], 'r')
+    plt.plot(trainSetRAW["Lower Band"], 'g')
+    
+    
+    plt.plot(trainSetRAW["RSI scaled"], 'r')
+    
     plt.show()
     
     ## end
