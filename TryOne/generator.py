@@ -130,12 +130,35 @@ for i, row in secndLvlTestSet.iterrows():
     
     from sklearn.preprocessing import MinMaxScaler
     
+    # MACD
     trainSetRAW['26 ema'] = trainSetRAW["EURUSD"].ewm(span=26).mean()
     trainSetRAW['12 ema'] = trainSetRAW["EURUSD"].ewm(span=12).mean()
     trainSetRAW['MACD'] = (trainSetRAW['12 ema'] - trainSetRAW['26 ema'])
     
     sc = MinMaxScaler(feature_range = (-1, 1))
     trainSetRAW["MACD scaled"] = sc.fit_transform(trainSetRAW[['MACD']])
+
+    # BB
+    trainSetRAW['20 ma'] = trainSetRAW['EURUSD'].rolling(20).mean()
+    trainSetRAW['20 sd'] = trainSetRAW['EURUSD'].rolling(20).std()
+    trainSetRAW['Upper Band'] = trainSetRAW['20 ma'] + (trainSetRAW['20 sd']*2)
+    trainSetRAW['Lower Band'] = trainSetRAW['20 ma'] - (trainSetRAW['20 sd']*2)
+    
+    # RSI
+    period = 14
+    delta = trainSetRAW['EURUSD'].diff().dropna()
+    u = delta * 0
+    d = u.copy()
+    u[delta > 0] = delta[delta > 0]
+    d[delta < 0] = -delta[delta < 0]
+    u[u.index[period-1]] = np.mean( u[:period] )
+    u = u.drop(u.index[:(period-1)])
+    d[d.index[period-1]] = np.mean( d[:period] )
+    d = d.drop(d.index[:(period-1)])
+    rs = u.ewm(com=period-1, adjust=False).mean() / d.ewm(com=period-1, adjust=False).mean()
+    rsi = 100 - 100 / (1 + rs)
+    trainSetRAW['RSI'] = rsi
+    trainSetRAW["RSI scaled"] = rsi / 100
     
     import matplotlib.pyplot as plt
     

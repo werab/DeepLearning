@@ -16,6 +16,7 @@
 # additional information
 # https://www.linkedin.com/pulse/python-tutorial-bollinger-bands-andrew-hamlet
 # https://www.linkedin.com/pulse/python-tutorial-macd-moving-average-andrew-hamlet
+# http://www.andrewshamlet.net/2017/06/10/python-tutorial-rsi/
 
 # regularisation
 ## kernel_regularizer? / bias_regularizer? / activity_regularizer?
@@ -52,6 +53,7 @@
 
 # course from marco
 ## https://www.coursera.org/learn/machine-learning
+## https://www.deeplearning.ai/
 # go article
 ## https://www.nature.com/articles/nature24270.epdf?author_access_token=VJXbVjaSHxFoctQQ4p2k4tRgN0jAjWel9jnR3ZoTv0PVW4gB86EEpGqTRDtpIz-2rmo8-KG06gqVobU5NSCFeHILHcVFUeMsbvwS-lxjqQGg98faovwjxeTUgZAUMnRQ
 
