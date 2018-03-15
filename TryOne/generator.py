@@ -185,21 +185,27 @@ for i, row in secndLvlTestSet.iterrows():
     from sklearn.preprocessing import MinMaxScaler
     import numpy as np
     
-    sc = MinMaxScaler(feature_range = (0, 1))
+    sc = MinMaxScaler(feature_range = (0.05, 1))
     
-    a = np.array([2.,5.,6.,7.,20.]) #.reshape(-1,1)
+    a = np.array([2.,5.,6.,7.,12.])
     a = a-a.min()
     a_based = a.reshape(-1,1)
     
     b = np.array([14.,13.,12.,15.,17.])
-    a = a-a.min()
+    b = b-b.min()
     b_based = b.reshape(-1,1)
+
+    c = np.array([34.,33.,30.,35.,37.])
+    c = c-c.min()
+    c_based = c.reshape(-1,1)
     
     a_plot = sc.fit_transform(a_based)
     b_plot = sc.transform(b_based)
+    c_plot = sc.transform(c_based)
     
     plt.plot(a_plot, 'b')
     plt.plot(b_plot, 'r')
+    plt.plot(c_plot, 'g')
     
     
     ## end
