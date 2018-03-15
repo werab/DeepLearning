@@ -49,6 +49,8 @@ class DataSet():
                 return [0,1,0]
         return [0,0,1]
 
+    # todos: append batch from orignal_set and scale later
+
     def getStructuredData(self, dataset, orignal_set, scaled_set, symbol):
         x = []
         y = []
@@ -86,6 +88,10 @@ class DataSet():
                                  date_parser=self.dateparse)
                 df = pd.concat([df, next_df])
         return df
+
+    # x_arr_train_main now contains orinial data
+    # scale now:
+    # take 
 
     def getXYArrays(self, datasetTrain, datasetTest):
         sc = MinMaxScaler(feature_range = (0, 1))
@@ -150,6 +156,8 @@ class DataSet():
             raise
         
         dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='quadratic', limit=self.interpolateLimit).dropna()
+    
+        # add BB MACD RSI here before dropna()
     
         dataset_train = dataset_inter[(dataset_inter.index > self.beginTrain) & (dataset_inter.index < self.endTrain)]
         dataset_train = dataset_train.iloc[:, 0:1]

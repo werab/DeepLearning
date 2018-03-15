@@ -128,11 +128,13 @@ for i, row in secndLvlTestSet.iterrows():
     
     ## testing 
     
+    trainSetRAW = trainSetRAW.resample('T').asfreq()
+    
     from sklearn.preprocessing import MinMaxScaler
     
     # MACD
-    trainSetRAW['26 ema'] = trainSetRAW["EURUSD"].ewm(span=26).mean()
-    trainSetRAW['12 ema'] = trainSetRAW["EURUSD"].ewm(span=12).mean()
+    trainSetRAW['26 ema'] = trainSetRAW["EURUSD"].ewm(span=26, min_periods=26).mean()
+    trainSetRAW['12 ema'] = trainSetRAW["EURUSD"].ewm(span=12, min_periods=12).mean()
     trainSetRAW['MACD'] = (trainSetRAW['12 ema'] - trainSetRAW['26 ema'])
     
     sc = MinMaxScaler(feature_range = (-1, 1))
@@ -179,6 +181,26 @@ for i, row in secndLvlTestSet.iterrows():
     plt.plot(trainSetRAW["RSI scaled"], 'r')
     
     plt.show()
+    
+    from sklearn.preprocessing import MinMaxScaler
+    import numpy as np
+    
+    sc = MinMaxScaler(feature_range = (0, 1))
+    
+    a = np.array([2.,5.,6.,7.,20.]) #.reshape(-1,1)
+    a = a-a.min()
+    a_based = a.reshape(-1,1)
+    
+    b = np.array([14.,13.,12.,15.,17.])
+    a = a-a.min()
+    b_based = b.reshape(-1,1)
+    
+    a_plot = sc.fit_transform(a_based)
+    b_plot = sc.transform(b_based)
+    
+    plt.plot(a_plot, 'b')
+    plt.plot(b_plot, 'r')
+    
     
     ## end
 
