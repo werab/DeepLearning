@@ -49,9 +49,7 @@ class DataSet():
                 return [0,1,0]
         return [0,0,1]
 
-    # todos: append batch from orignal_set and scale later
-
-    def getStructuredData(self, dataset, orignal_set, scaled_set, symbol):
+    def getStructuredData(self, dataset, orignal_set, symbol):
         x = []
         y = []
     
@@ -69,7 +67,7 @@ class DataSet():
             if range_from >= range_to:
                 continue
             for i in range(range_from, range_to, self.lookback_stepsize):
-                x.append(scaled_set[i-self.lookback_batch:i, 0])
+                x.append(orignal_set[i-self.lookback_batch:i, 0])
                 if symbol == self.mainSymbol:
                     y.append(self.getCategory(orignal_set[i], np.array(orignal_set[i+1:i+self.forward_set_lengh])))
             week_start_idx = week_end_idx
@@ -89,9 +87,28 @@ class DataSet():
                 df = pd.concat([df, next_df])
         return df
 
-    # x_arr_train_main now contains orinial data
-    # scale now:
-    # take 
+    def createScaledSet(self, trainSet, testSet):
+        scaledTrainSet = []
+        scaledTestSet = []
+        
+        sc = MinMaxScaler(feature_range = (0.05, 1))
+        
+        maxVal = 0
+        for rangeSet in trainSet:
+            newSet = rangeSet - rangeSet.min()
+            scaledTrainSet.append(np.array([newSet]).reshape(-1,1))
+            if newSet.max() > maxVal:
+                maxVal = newSet.max()
+                sc.fit_transform(newSet.reshape(-1,1))
+                
+        for i, rangeSet in enumerate(scaledTrainSet):
+            scaledTrainSet[i] = sc.transform(rangeSet)
+
+        for rangeSet in testSet:
+            scaledTestSet.append(sc.transform(np.array([rangeSet]).reshape(-1,1)))
+        
+        return scaledTrainSet, scaledTestSet
+
 
     def getXYArrays(self, datasetTrain, datasetTest):
         sc = MinMaxScaler(feature_range = (0, 1))
@@ -99,16 +116,16 @@ class DataSet():
         ## Main Symbol ##
         symArrTrainMain = datasetTrain[self.mainSymbol]
         training_set_main = np.array([symArrTrainMain.values]).reshape(-1,1)
-        training_set_scaled_main = sc.fit_transform(training_set_main)
         
         symArrTestMain = datasetTest[self.mainSymbol]
         test_set_main = np.array([symArrTestMain.values]).reshape(-1,1)
-        test_set_scaled_main = sc.transform(test_set_main)
         
         x_arr_train_main, y_arr_train_main = self.getStructuredData(
-                symArrTrainMain, training_set_main, training_set_scaled_main, self.mainSymbol)
+                symArrTrainMain, training_set_main, self.mainSymbol)
         x_arr_test_main, y_arr_test_main = self.getStructuredData(
-                symArrTestMain, test_set_main, test_set_scaled_main, self.mainSymbol)
+                symArrTestMain, test_set_main, self.mainSymbol)
+        
+        x_arr_train_main, x_arr_test_main = self.createScaledSet(x_arr_train_main, x_arr_test_main)
         
         y_train = np.array(y_arr_train_main)
         y_test = np.array(y_arr_test_main)
@@ -120,16 +137,16 @@ class DataSet():
         for symbol in self.indicatorSymbols:
             symArrTrain = datasetTrain[symbol]
             training_set = np.array([symArrTrain.values]).reshape(-1,1)
-            training_set_scaled = sc.fit_transform(training_set)
             
             symArrTest = datasetTest[symbol]
             test_set = np.array([symArrTest.values]).reshape(-1,1)
-            test_set_scaled = sc.transform(test_set)
         
             x_arr_train, y_arr_train = self.getStructuredData(
-                    symArrTrain, training_set, training_set_scaled, symbol)
+                    symArrTrain, training_set, symbol)
             x_arr_test, y_arr_test = self.getStructuredData(
-                    symArrTest, test_set, test_set_scaled, symbol)
+                    symArrTest, test_set, symbol)
+    
+            x_arr_train, x_arr_test = self.createScaledSet(x_arr_train, x_arr_test)
     
             X_train.append(x_arr_train)
             X_test.append(x_arr_test)

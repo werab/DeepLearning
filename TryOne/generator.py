@@ -26,8 +26,9 @@ useTrainData = True
 config = {
      'mainSymbol'             : 'EURUSD', # base lvl
 #     'indicatorSymbols'       : ['EURGBP', 'GBPUSD', 'USDJPY', 'EURJPY'], # base lvl
-     'indicatorSymbols'       : ['EURGBP', 'EURJPY'], # base lvl
+#     'indicatorSymbols'       : ['EURGBP', 'EURJPY'], # base lvl
 #     'indicatorSymbols'       : ['EURGBP'], # base lvl
+     'indicatorSymbols'       : [], # base lvl
 
      'l2RegularizeVal'        : 0.001, # 'None' to dectivate # 1th lvl
 #     'kernel_size'             : 9,
@@ -128,84 +129,79 @@ for i, row in secndLvlTestSet.iterrows():
     
     ## testing 
     
-    trainSetRAW = trainSetRAW.resample('T').asfreq()
-    
-    from sklearn.preprocessing import MinMaxScaler
-    
-    # MACD
-    trainSetRAW['26 ema'] = trainSetRAW["EURUSD"].ewm(span=26, min_periods=26).mean()
-    trainSetRAW['12 ema'] = trainSetRAW["EURUSD"].ewm(span=12, min_periods=12).mean()
-    trainSetRAW['MACD'] = (trainSetRAW['12 ema'] - trainSetRAW['26 ema'])
-    
-    sc = MinMaxScaler(feature_range = (-1, 1))
-    trainSetRAW["MACD scaled"] = sc.fit_transform(trainSetRAW[['MACD']])
-
-    # BB
-    trainSetRAW['20 ma'] = trainSetRAW['EURUSD'].rolling(20).mean()
-    trainSetRAW['20 sd'] = trainSetRAW['EURUSD'].rolling(20).std()
-#    trainSetRAW['Upper Band'] = trainSetRAW['20 ma'] + (trainSetRAW['20 sd']*2)
-#    trainSetRAW['Lower Band'] = trainSetRAW['20 ma'] - (trainSetRAW['20 sd']*2)
-
-    trainSetRAW['Upper Band'] = trainSetRAW['20 sd']*2
-    trainSetRAW['Lower Band'] = trainSetRAW['20 sd']*-2
-    
-    # RSI
-    period = 14
-    delta = trainSetRAW['EURUSD'].diff().dropna()
-    u = delta * 0
-    d = u.copy()
-    u[delta > 0] = delta[delta > 0]
-    d[delta < 0] = -delta[delta < 0]
-    u[u.index[period-1]] = np.mean( u[:period] )
-    u = u.drop(u.index[:(period-1)])
-    d[d.index[period-1]] = np.mean( d[:period] )
-    d = d.drop(d.index[:(period-1)])
-    rs = u.ewm(com=period-1, adjust=False).mean() / d.ewm(com=period-1, adjust=False).mean()
-    rsi = 100 - 100 / (1 + rs)
-    trainSetRAW['RSI'] = rsi
-    trainSetRAW["RSI scaled"] = (rsi - 50) / 100
-    
-    import matplotlib.pyplot as plt
-    
-    plt.plot(trainSetRAW["EURUSD"], 'g')
-    plt.plot(trainSetRAW["26 ema"], 'b')
-    plt.plot(trainSetRAW["12 ema"], 'r')
-    plt.plot(trainSetRAW["MACD"], 'r')
-    plt.plot(trainSetRAW["MACD scaled"], 'r')
-    
-    plt.plot(trainSetRAW["20 ma"], 'b')
-    plt.plot(trainSetRAW["Upper Band"], 'r')
-    plt.plot(trainSetRAW["Lower Band"], 'g')
-    
-    
-    plt.plot(trainSetRAW["RSI scaled"], 'r')
-    
-    plt.show()
-    
-    from sklearn.preprocessing import MinMaxScaler
-    import numpy as np
-    
-    sc = MinMaxScaler(feature_range = (0.05, 1))
-    
-    a = np.array([2.,5.,6.,7.,12.])
-    a = a-a.min()
-    a_based = a.reshape(-1,1)
-    
-    b = np.array([14.,13.,12.,15.,17.])
-    b = b-b.min()
-    b_based = b.reshape(-1,1)
-
-    c = np.array([34.,33.,30.,35.,37.])
-    c = c-c.min()
-    c_based = c.reshape(-1,1)
-    
-    a_plot = sc.fit_transform(a_based)
-    b_plot = sc.transform(b_based)
-    c_plot = sc.transform(c_based)
-    
-    plt.plot(a_plot, 'b')
-    plt.plot(b_plot, 'r')
-    plt.plot(c_plot, 'g')
+#    trainSetRAW = trainSetRAW.resample('T').asfreq()
+#    
+#    from sklearn.preprocessing import MinMaxScaler
+#    
+#    # MACD
+#    trainSetRAW['26 ema'] = trainSetRAW["EURUSD"].ewm(span=26, min_periods=26).mean()
+#    trainSetRAW['12 ema'] = trainSetRAW["EURUSD"].ewm(span=12, min_periods=12).mean()
+#    trainSetRAW['MACD'] = (trainSetRAW['12 ema'] - trainSetRAW['26 ema'])
+#    
+#    sc = MinMaxScaler(feature_range = (-1, 1))
+#    trainSetRAW["MACD scaled"] = sc.fit_transform(trainSetRAW[['MACD']])
+#
+#    # BB
+#    trainSetRAW['20 ma'] = trainSetRAW['EURUSD'].rolling(20).mean()
+#    trainSetRAW['20 sd'] = trainSetRAW['EURUSD'].rolling(20).std()
+##    trainSetRAW['Upper Band'] = trainSetRAW['20 ma'] + (trainSetRAW['20 sd']*2)
+##    trainSetRAW['Lower Band'] = trainSetRAW['20 ma'] - (trainSetRAW['20 sd']*2)
+#
+#    trainSetRAW['Upper Band'] = trainSetRAW['20 sd']*2
+#    trainSetRAW['Lower Band'] = trainSetRAW['20 sd']*-2
+#    
+#    # RSI
+#    period = 14
+#    delta = trainSetRAW['EURUSD'].diff().dropna()
+#    u = delta * 0
+#    d = u.copy()
+#    u[delta > 0] = delta[delta > 0]
+#    d[delta < 0] = -delta[delta < 0]
+#    u[u.index[period-1]] = np.mean( u[:period] )
+#    u = u.drop(u.index[:(period-1)])
+#    d[d.index[period-1]] = np.mean( d[:period] )
+#    d = d.drop(d.index[:(period-1)])
+#    rs = u.ewm(com=period-1, adjust=False).mean() / d.ewm(com=period-1, adjust=False).mean()
+#    rsi = 100 - 100 / (1 + rs)
+#    trainSetRAW['RSI'] = rsi
+#    trainSetRAW["RSI scaled"] = (rsi - 50) / 100
+#    
+#    import matplotlib.pyplot as plt
+#    
+#    plt.plot(trainSetRAW["EURUSD"], 'g')
+#    plt.plot(trainSetRAW["26 ema"], 'b')
+#    plt.plot(trainSetRAW["12 ema"], 'r')
+#    plt.plot(trainSetRAW["MACD"], 'r')
+#    plt.plot(trainSetRAW["MACD scaled"], 'r')
+#    
+#    plt.plot(trainSetRAW["20 ma"], 'b')
+#    plt.plot(trainSetRAW["Upper Band"], 'r')
+#    plt.plot(trainSetRAW["Lower Band"], 'g')
+#    
+#    
+#    plt.plot(trainSetRAW["RSI scaled"], 'r')
+#    
+#    plt.show()
+#    
+#    from sklearn.preprocessing import MinMaxScaler
+#    import numpy as np
+#    
+#    sc = MinMaxScaler(feature_range = (0.05, 1))
+#    
+#    a = np.array([.2,.3,.21,.25,.12])
+#    a = a-a.min()
+#    a_based = a.reshape(-1,1)
+#    
+#    b = np.array([.14,.13,.12,.15,.17])
+#    b = b-b.min()
+#    b_based = b.reshape(-1,1)
+#    
+#    sc.fit_transform(a_based)
+#    b_plot = sc.transform(b_based)
+#    a_plot = sc.transform(a_based)
+#    
+#    plt.plot(a_plot, 'b')
+#    plt.plot(b_plot, 'r')
     
     
     ## end
