@@ -111,8 +111,6 @@ class DataSet():
 
 
     def getXYArrays(self, datasetTrain, datasetTest):
-        sc = MinMaxScaler(feature_range = (0, 1))
-        
         ## Main Symbol ##
         symArrTrainMain = datasetTrain[self.mainSymbol]
         training_set_main = np.array([symArrTrainMain.values]).reshape(-1,1)
@@ -163,6 +161,55 @@ class DataSet():
     
         return X_train, y_train, X_test, y_test
 
+    def setMACD(self, df, symbol, slow, fast):
+        df['slow ema'] = df[symbol].ewm(span=slow, ignore_na=False).mean()
+        df['fast ema'] = df[symbol].ewm(span=fast, ignore_na=False).mean()
+        df['MACD'] = (df['fast ema'] - df['slow ema'])
+        
+        sc = MinMaxScaler(feature_range = (-1, 1))
+        df[symbol+" MACD"] = sc.fit_transform(df[['MACD']])
+        
+        df = df.drop(columns=['slow ema', 'fast ema', 'MACD'])
+        
+        return df
+        
+    def setSD_MA(self, df, symbol, span):
+        df['ma'] = df[symbol].rolling(span).mean()
+        df['sd'] = df[symbol].rolling(span).std()
+        
+        df = df.dropna()
+        sc = MinMaxScaler(feature_range = (0, 1))
+        df[symbol+" MA"] = sc.fit_transform(df[['ma']])
+        df[symbol+" SD"] = sc.fit_transform(df[['sd']])
+        
+        df = df.drop(columns=['ma', 'sd'])
+        df = df.resample('1T').asfreq()
+        
+        return df
+
+    def setRSI(self, df,  symbol, period = 14):
+        delta = df[symbol].diff().dropna()
+        u = delta * 0
+        d = u.copy()
+        u[delta > 0] = delta[delta > 0]
+        d[delta < 0] = -delta[delta < 0]
+        u[u.index[period-1]] = np.mean( u[:period] )
+        u = u.drop(u.index[:(period-1)])
+        d[d.index[period-1]] = np.mean( d[:period] )
+        d = d.drop(d.index[:(period-1)])
+        rs = u.ewm(com=period-1, adjust=False).mean() / d.ewm(com=period-1, adjust=False).mean()
+        rsi = 100 - 100 / (1 + rs)
+        df[symbol+ " RSI"] = (rsi - 50) / 100
+
+    def interp(self, df, limit):
+        d = df.notna().rolling(limit + 1).agg(any).fillna(1)
+        d = pd.concat({
+            i: d.shift(-i).fillna(1)
+            for i in range(limit + 1)
+        }).prod(level=1)
+    
+        return df.interpolate(limit=limit, method='quadratic').where(d.astype(bool))
+
     def getDataForSymbol(self, symbol):
         # parse 0/1 column to datetime column
         dataset_raw = None
@@ -172,16 +219,155 @@ class DataSet():
             print("missing data for symbol %s for year range %s - %s, 0 rows found." % (symbol, self.beginTrain.year, self.endTest.year))
             raise
         
-        dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='quadratic', limit=self.interpolateLimit).dropna()
+        dataset_inter = dataset_raw.iloc[:, 0:1]
+        dataset_inter = dataset_inter.rename(columns = {2: symbol})
+        dataset_inter = dataset_inter[(dataset_inter.index > self.beginTrain) & (dataset_inter.index < self.endTest)]
+        
+#        with open("data.pickle", 'wb') as fp:
+#            pickle.dump(dataset_raw, fp)
+        
+        if int(pd.__version__.split(".")[1]) < 23:
+            dataset_inter = dataset_inter.resample('1T').asfreq().pipe(self.interp, 60)
+        else:
+            dataset_inter = dataset_inter.resample('1T').asfreq().interpolate(method='quadratic', limit=60, limit_area='inside')
+
+        # add special data
+        dataset_inter = self.setMACD(dataset_inter, symbol, 26, 12)
+        dataset_inter = self.setSD_MA(dataset_inter, symbol, 20)
+        self.setRSI(dataset_inter, symbol, 14)
     
-        # add BB MACD RSI here before dropna()
+        dataset_inter = dataset_inter.dropna()
     
         dataset_train = dataset_inter[(dataset_inter.index > self.beginTrain) & (dataset_inter.index < self.endTrain)]
-        dataset_train = dataset_train.iloc[:, 0:1]
-        dataset_train = dataset_train.rename(columns = {2: symbol})
-        
         dataset_test = dataset_inter[(dataset_inter.index > self.endTrain) & (dataset_inter.index < self.endTest)]
-        dataset_test = dataset_test.iloc[:, 0:1]
-        dataset_test = dataset_test.rename(columns = {2: symbol})
     
         return dataset_train, dataset_test
+    
+## Test main ##
+#from datetime import datetime, timedelta
+#import pickle
+#
+#
+#getTrainData = True
+#endTrain = datetime(2018,1,14)
+#beginTrain = endTrain - timedelta(weeks=2)
+#endTest = endTrain + timedelta(weeks=2)
+#
+#symbol = 'EURUSD'
+#
+#config = {
+#     'mainSymbol'             : 'EURUSD', # base lvl
+#     'indicatorSymbols'       : [], # base lvl
+#
+#     'lookback_stepsize'      : 1, # 2nd lvl
+#     'beginTrain'             : beginTrain, # 2nd lvl
+#     'endTrain'               : endTrain,
+#     'endTest'                : endTest, # 2nd lvl
+#
+#     'lookback_batch'         : 24*60, # const
+#     'maxTimeDeltaAcceptance' : '1 days 1 hours', # const
+#     'forward_set_lengh'      : 60, # const
+#     'interpolateLimit'       : 60, # const
+#     'bounds'                 : { 'EURUSD' : 0.0010 }, # const
+#}
+#
+#
+#
+#dataSet = DataSet(config, True)
+#trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'])
+#
+##X_train, y_train, X_test, y_test = dataSet.getXYArrays(trainSetRAW, testSetRAW)
+#
+#with open('data.pickle', 'rb') as fp:
+#    dataset_raw = pickle.load(fp)
+#  
+#def interp(df, limit):
+#    d = df.notna().rolling(limit + 1).agg(any).fillna(1)
+#    d = pd.concat({
+#        i: d.shift(-i).fillna(1)
+#        for i in range(limit + 1)
+#    }).prod(level=1)
+#
+#    return df.interpolate(limit=limit, method='quadratic').where(d.astype(bool))
+#
+## todo:
+## remove "interp" fix, if pandas 0.23 is live
+#if int(pd.__version__.split(".")[1]) < 23:
+#    dataset_inter = dataset_raw.resample('1T').asfreq().pipe(interp, 60)
+#else:
+#    dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='quadratic', limit=60, limit_area='inside')
+#
+#
+#dataset_inter = dataset_inter.iloc[:, 0:1]
+#dataset_inter = dataset_inter.rename(columns = {2: symbol})
+
+#from sklearn.preprocessing import MinMaxScaler
+
+## MACD
+##dataset_inter['26 ema'] = dataset_inter[symbol].ewm(span=26, min_periods=26, ignore_na=False).mean()
+##dataset_inter['12 ema'] = dataset_inter[symbol].ewm(span=12, min_periods=12, ignore_na=False).mean()
+#dataset_inter['26 ema'] = dataset_inter[symbol].ewm(span=26, ignore_na=False).mean()
+#dataset_inter['12 ema'] = dataset_inter[symbol].ewm(span=12, ignore_na=False).mean()
+#dataset_inter['MACD'] = (dataset_inter['12 ema'] - dataset_inter['26 ema'])
+#
+#sc = MinMaxScaler(feature_range = (-1, 1))
+#dataset_inter["MACD scaled"] = sc.fit_transform(dataset_inter[['MACD']])
+#
+#
+#dataset_inter['20 ma'] = dataset_inter[symbol].rolling(20).mean()
+#dataset_inter['20 sd'] = dataset_inter[symbol].rolling(20).std()
+#
+#dataset_inter = dataset_inter.dropna()
+#
+#sc = MinMaxScaler(feature_range = (0, 1))
+#dataset_inter["20 ma scaled"] = sc.fit_transform(dataset_inter[['20 ma']])
+#dataset_inter["20 sd scaled"] = sc.fit_transform(dataset_inter[['20 sd']])
+#
+#period = 14
+#delta = dataset_inter[symbol].diff().dropna()
+#u = delta * 0
+#d = u.copy()
+#u[delta > 0] = delta[delta > 0]
+#d[delta < 0] = -delta[delta < 0]
+#u[u.index[period-1]] = np.mean( u[:period] )
+#u = u.drop(u.index[:(period-1)])
+#d[d.index[period-1]] = np.mean( d[:period] )
+#d = d.drop(d.index[:(period-1)])
+#rs = u.ewm(com=period-1, adjust=False).mean() / d.ewm(com=period-1, adjust=False).mean()
+#rsi = 100 - 100 / (1 + rs)
+#dataset_inter['RSI'] = rsi
+#dataset_inter["RSI scaled"] = (rsi - 50) / 100
+#
+#
+#import matplotlib.pyplot as plt
+#
+#plt.plot(dataset_inter["RSI scaled"], 'black')
+#plt.plot(dataset_inter["MACD scaled"], 'r')
+#plt.plot(dataset_inter["20 sd scaled"], 'g')
+#plt.plot(dataset_inter["20 ma scaled"], 'r')
+#
+#plt.plot(dataset_raw.resample('1T').asfreq().iloc[:, 0:1], 'b')
+#
+#
+#
+#plt.plot(dataset_inter.iloc[:, 0:1], 'b')
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
