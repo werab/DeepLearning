@@ -179,8 +179,9 @@ class DataSet():
         
         df = df.dropna()
         sc = MinMaxScaler(feature_range = (0, 1))
-        df[symbol+" MA"] = sc.fit_transform(df[['ma']])
-        df[symbol+" SD"] = sc.fit_transform(df[['sd']])
+        
+        df[symbol+" MA"] = sc.fit_transform(df.loc[:,('ma')].reshape(-1,1))
+        df[symbol+" SD"] = sc.fit_transform(df.loc[:,('sd')].reshape(-1,1))
         
         df = df.drop(columns=['ma', 'sd'])
         df = df.resample('1T').asfreq()
@@ -244,40 +245,50 @@ class DataSet():
         return dataset_train, dataset_test
     
 ## Test main ##
-#from datetime import datetime, timedelta
-#import pickle
-#
-#
-#getTrainData = True
-#endTrain = datetime(2018,1,14)
-#beginTrain = endTrain - timedelta(weeks=2)
-#endTest = endTrain + timedelta(weeks=2)
-#
-#symbol = 'EURUSD'
-#
-#config = {
-#     'mainSymbol'             : 'EURUSD', # base lvl
-#     'indicatorSymbols'       : [], # base lvl
-#
-#     'lookback_stepsize'      : 1, # 2nd lvl
-#     'beginTrain'             : beginTrain, # 2nd lvl
-#     'endTrain'               : endTrain,
-#     'endTest'                : endTest, # 2nd lvl
-#
-#     'lookback_batch'         : 24*60, # const
-#     'maxTimeDeltaAcceptance' : '1 days 1 hours', # const
-#     'forward_set_lengh'      : 60, # const
-#     'interpolateLimit'       : 60, # const
-#     'bounds'                 : { 'EURUSD' : 0.0010 }, # const
-#}
-#
-#
-#
-#dataSet = DataSet(config, True)
-#trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'])
-#
-##X_train, y_train, X_test, y_test = dataSet.getXYArrays(trainSetRAW, testSetRAW)
-#
+from datetime import datetime, timedelta
+import pickle
+
+
+getTrainData = True
+endTrain = datetime(2018,1,14)
+beginTrain = endTrain - timedelta(weeks=2)
+endTest = endTrain + timedelta(weeks=2)
+
+symbol = 'EURUSD'
+
+config = {
+     'mainSymbol'             : 'EURUSD', # base lvl
+     'indicatorSymbols'       : ['EURGBP'], # base lvl
+
+     'lookback_stepsize'      : 1, # 2nd lvl
+     'beginTrain'             : beginTrain, # 2nd lvl
+     'endTrain'               : endTrain,
+     'endTest'                : endTest, # 2nd lvl
+
+     'lookback_batch'         : 24*60, # const
+     'maxTimeDeltaAcceptance' : '1 days 1 hours', # const
+     'forward_set_lengh'      : 60, # const
+     'interpolateLimit'       : 60, # const
+     'bounds'                 : { 'EURUSD' : 0.0010 }, # const
+}
+
+
+
+dataSet = DataSet(config, True)
+trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'])
+
+for sym in config['indicatorSymbols']:
+    _train, _test = dataSet.getDataForSymbol(sym)
+
+    trainSetRAW = pd.concat([trainSetRAW, _train], axis=1, join_axes=[trainSetRAW.index])
+    testSetRAW = pd.concat([testSetRAW, _test], axis=1, join_axes=[testSetRAW.index])
+
+X_train, y_train, X_test, y_test = dataSet.getXYArrays(trainSetRAW, testSetRAW)
+
+trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'])
+
+
+
 #with open('data.pickle', 'rb') as fp:
 #    dataset_raw = pickle.load(fp)
 #  
