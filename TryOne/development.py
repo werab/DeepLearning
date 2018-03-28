@@ -71,8 +71,8 @@ def setSD_MA(df, symbol, span):
     
     df = df.dropna()
     sc = MinMaxScaler(feature_range = (0, 1))
-    df[symbol+" MA"] = sc.fit_transform(df[['ma']])
-    df[symbol+" SD"] = sc.fit_transform(df[['sd']])
+    df[symbol+" MA"] = sc.fit_transform(df.loc[:,('ma')].reshape(-1,1))
+    df[symbol+" SD"] = sc.fit_transform(df.loc[:,('sd')].reshape(-1,1))
     
     df = df.drop(columns=['ma', 'sd'])
     df = df.resample('1T').asfreq()
@@ -154,56 +154,68 @@ lookback_batch = config['lookback_batch']
 forward_set_lengh = config['forward_set_lengh']
 lookback_stepsize = config['lookback_stepsize']
 
-def getStructuredData(dataset, symbol):
+
+# todo:
+# check check and double check if this is still correct
+def getStructuredData(dataset, symbol, rangeMax = False):
     x = []
     y = []
 
-    orignal_set = np.array(dataset[[symbol]]).reshape(-1,1)
+    orignal_set = np.array(dataset.loc[:,(symbol)]).reshape(-1,1)
     
     # idx of new week beginnings
     week_change_idx = np.array(dataset.reset_index()['datetime'].diff() 
         > pd.Timedelta(maxTimeDeltaAcceptance)).nonzero()
     week_change_idx = np.append(week_change_idx, len(orignal_set))
     
+    print("week_change_idx: %s" % week_change_idx)
+    
     week_start_idx = 0
+    maxSet = np.array([0])
     for week_end_idx in np.nditer(week_change_idx):
-    #    print("from: ", week_start_idx, " to: ", week_end_idx, " diff: ", week_end_idx-week_start_idx)
-    #    print("next range from: ", week_start_idx+lookback_batch, " to: ", week_end_idx-forward_set_lengh)
+        print("from: ", week_start_idx, " to: ", week_end_idx, " diff: ", week_end_idx-week_start_idx)
+        print("next range from: ", week_start_idx+lookback_batch, " to: ", week_end_idx-forward_set_lengh)
         range_from = week_start_idx + lookback_batch
         range_to = week_end_idx - forward_set_lengh
         if range_from >= range_to:
             continue
+        
         for i in range(range_from, range_to, lookback_stepsize):
-            # symbol must be first column
-            x.append(dataset.iloc[i-lookback_batch:i,:].as_matrix())
+            dataRange = dataset.iloc[i-lookback_batch:i,:].as_matrix().copy()
+            dataRange[:,0:1] = dataRange[:,0:1] - dataRange[:,0:1].min() # prepare symbol data for scaling
+            # get max
+            if rangeMax and dataRange[:,0:1].max() > maxSet.max():
+                maxSet = dataRange[:,0:1]
+            # symbol is (must be!) first column
+            x.append(dataRange)
             if symbol == mainSymbol:
                 y.append(getCategory(orignal_set[i], np.array(orignal_set[i+1:i+forward_set_lengh])))
         week_start_idx = week_end_idx
     
-    return x, y
+    return x, y, maxSet
 
-def createScaledSet(trainSet, testSet):
-    scaledTrainSet = []
-    scaledTestSet = []
-    
-    sc = MinMaxScaler(feature_range = (0.05, 1))
-    
-    maxSet = None    
-    for rangeSet in trainSet:
-        newSet = rangeSet - rangeSet.min()
-        scaledTrainSet.append(np.array([newSet]).reshape(-1,1))
-        if newSet.max() > maxSet.max():
-            maxSet = newSet
-            
-    sc.fit_transform(maxSet.reshape(-1,1))
-            
-    for i, rangeSet in enumerate(scaledTrainSet):
-        scaledTrainSet[i] = sc.transform(rangeSet)
-
-    for rangeSet in testSet:
-        scaledTestSet.append(sc.transform(np.array([rangeSet]).reshape(-1,1)))
-    
-    return scaledTrainSet, scaledTestSet
+#def createScaledSet(trainSet, testSet):
+#    scaledTrainSet = []
+#    scaledTestSet = []
+#    
+#    sc = MinMaxScaler(feature_range = (0.05, 1))
+#    
+#    maxSet = None    
+#    for rangeSet in trainSet:
+#        newSet = rangeSet - rangeSet.min()
+#        scaledTrainSet.append(np.array([newSet]).reshape(-1,1))
+#        if newSet.max() > maxSet.max():
+#            maxSet = newSet
+#            
+#    sc.fit_transform(maxSet.reshape(-1,1))
+#            
+#    for i, rangeSet in enumerate(scaledTrainSet):
+#        scaledTrainSet[i] = sc.transform(rangeSet)
+#
+#    for rangeSet in testSet:
+#        scaledTestSet.append(sc.transform(np.array([rangeSet]).reshape(-1,1)))
+#    
+#    return scaledTrainSet, scaledTestSet
 
 mainSymbol = config['mainSymbol']
 indicatorSymbols = config['indicatorSymbols']
@@ -221,22 +233,21 @@ trainSetRAW, testSetRAW = getDataForSymbol(config['mainSymbol'])
 
 #X_train, y_train, X_test, y_test = getXYArrays(trainSetRAW, testSetRAW)
 
-datasetTrain = trainSetRAW.copy()
-datasetTest = testSetRAW.copy()
 
-orignal_set = np.array(datasetTrain[[symbol]]).reshape(-1,1)
+
+#orignal_set = np.array(datasetTrain.loc[:,(symbol)]).reshape(-1,1)
 
 # delete symbol column
-datasetTrain.drop(columns=[symbol], inplace=True)
+#datasetTrain.drop(columns=[symbol], inplace=True)
 
-x = []
-for i in range(3):
-    symbolSet = orignal_set[0+i:10+i, :]
-    calcSet = datasetTrain.iloc[0+i:10+i,:].as_matrix()
-    x.append(np.concatenate((symbolSet, calcSet), axis=1))
+#x = []
+#for i in range(3):
+#    symbolSet = orignal_set[0+i:10+i, :]
+#    calcSet = datasetTrain.iloc[0+i:10+i,:].as_matrix()
+#    x.append(np.concatenate((symbolSet, calcSet), axis=1))
     
     
-bla = np.array(x).shape
+#bla = np.array([0]).max()
 
 #def getXYArrays(datasetTrain, datasetTest):
     ## Main Symbol ##
@@ -248,10 +259,59 @@ bla = np.array(x).shape
 
 # todo sturctured data pandas df must return np.shape (<events>, <timeframe 1440>, <different metrics>)
 # test scaling with one (main) metric
-x_arr_train_main, y_arr_train_main = getStructuredData(
-        datasetTrain, mainSymbol)
-x_arr_test_main, y_arr_test_main = getStructuredData(
+datasetTrain = trainSetRAW.copy()
+datasetTest = testSetRAW.copy()    
+    
+x_arr_train_main, y_arr_train_main, maxSet = getStructuredData(
+        datasetTrain, mainSymbol, True)
+x_arr_test_main, y_arr_test_main, _ = getStructuredData(
         datasetTest, mainSymbol)
+
+sc = MinMaxScaler(feature_range = (0.05, 1))
+sc.fit_transform(maxSet)
+
+trainSet = x_arr_train_main.copy()
+testSet = x_arr_test_main.copy()
+
+for i, rangeSet in enumerate(trainSet):
+    trainSet[i][:,0:1] = sc.transform(rangeSet[:,0:1])
+    
+for i, rangeSet in enumerate(testSet):
+    testSet[i][:,0:1] = sc.transform(rangeSet[:,0:1])
+
+
+
+#b = x_arr_train_main.copy()
+
+#eins = trainSet[1][:,0:1]
+
+#sc.transform(testSet[0][:,0:1])
+
+#for i, rangeSet in enumerate(trainSet):
+#    trainSet[i][:,0:1] = sc.transform(rangeSet[:,0:1])
+
+#import matplotlib.pyplot as plt
+#plt.plot(sc.transform(trainSet[7000][:,0:1]), 'black')
+#plt.plot(orignal_set, 'r')
+#plt.plot(trainSet[5000][:,0:1], 'b')
+#plt.plot(testSet[5000][:,0:1], 'b')
+#
+#plt.plot(datasetTrain.loc[:,(symbol)], 'r')
+#plt.plot(maxSet, 'black')
+#
+#
+#        
+#for i, rangeSet in enumerate(scaledTrainSet):
+#    scaledTrainSet[i] = sc.transform(rangeSet)
+#
+#for rangeSet in testSet:
+#    scaledTestSet.append(sc.transform(np.array([rangeSet]).reshape(-1,1)))
+
+
+
+
+
+
 
 x_arr_train_main, x_arr_test_main = createScaledSet(x_arr_train_main, x_arr_test_main)
 
