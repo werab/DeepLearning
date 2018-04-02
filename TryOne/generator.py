@@ -15,7 +15,7 @@ from classifier.CNN.Conf1DClassifier02 import Conf1DClassifier
 from classifier.PredictionHistory import PredictionHistory
 from misc.helper import calcCategories
 
-_version = 0.5
+_version = 0.6
 _epoch = 100
 weekDeltaProve = 1
 
@@ -44,7 +44,7 @@ config = {
 #     'weekDeltaProve'         : weekDeltaProve, # 2nd lvl
 
 
-     'lookback_batch'         : 24*60, # const
+     'lookback_batch'         : 12*60, # const
      'maxTimeDeltaAcceptance' : '1 days 1 hours', # const
      'forward_set_lengh'      : 60, # const
      'interpolateLimit'       : 60, # const
@@ -109,7 +109,7 @@ def execute(config, X_train, y_train, X_test, y_test, cat_count, useTrainData):
 
 secndLvlTestSet = { 'date': [], 'trainWeeks': [], 'stepsize': []}
 secndLvlTestSet = pd.DataFrame(data=secndLvlTestSet)
-secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2017,12,10), 'trainWeeks': 2, 'stepsize': 1 }, ignore_index=True)
+secndLvlTestSet = secndLvlTestSet.append({ 'date' : datetime(2018,2,4), 'trainWeeks': 2, 'stepsize': 1 }, ignore_index=True)
 
 
 for i, row in secndLvlTestSet.iterrows():
@@ -126,10 +126,6 @@ for i, row in secndLvlTestSet.iterrows():
     
     dataSet = DataSet(config, useTrainData)
     trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'])
-    
-    ## testing 
-    
-    ## end
 
     for sym in config['indicatorSymbols']:
         _train, _test = dataSet.getDataForSymbol(sym)
@@ -141,12 +137,6 @@ for i, row in secndLvlTestSet.iterrows():
     testSetRAW = testSetRAW.dropna()
 
     X_train, y_train, X_test, y_test = dataSet.getXYArrays(trainSetRAW, testSetRAW)
-    
-    b = np.squeeze(X_train)
-    
-    plt.plot(b[2000,:], 'b')
-    plt.plot(b[2300,:], 'r')
-    plt.plot(b[2600,:], 'g')
 
     cat_count, cat_weights = calcCategories(y_train)
     

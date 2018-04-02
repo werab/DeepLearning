@@ -3,6 +3,7 @@
 import pandas as pd
 import numpy as np
 import glob
+import scipy.stats as stats
 #from datetime import datetime, timedelta
 from sklearn.preprocessing import MinMaxScaler
 
@@ -49,30 +50,40 @@ class DataSet():
                 return [0,1,0]
         return [0,0,1]
 
-    def getStructuredData(self, dataset, orignal_set, symbol):
+    def getStructuredData(self, dataset, symbol, rangeMax = False):
         x = []
         y = []
     
+        orignal_set = np.array(dataset.loc[:,(symbol)]).reshape(-1,1)
+        
         # idx of new week beginnings
         week_change_idx = np.array(dataset.reset_index()['datetime'].diff() 
             > pd.Timedelta(self.maxTimeDeltaAcceptance)).nonzero()
         week_change_idx = np.append(week_change_idx, len(orignal_set))
         
         week_start_idx = 0
+        maxSet = np.array([0])
         for week_end_idx in np.nditer(week_change_idx):
-        #    print("from: ", week_start_idx, " to: ", week_end_idx, " diff: ", week_end_idx-week_start_idx)
-        #    print("next range from: ", week_start_idx+lookback_batch, " to: ", week_end_idx-forward_set_lengh)
+    #        print("from: ", week_start_idx, " to: ", week_end_idx, " diff: ", week_end_idx-week_start_idx)
+    #        print("next range from: ", week_start_idx+lookback_batch, " to: ", week_end_idx-forward_set_lengh)
             range_from = week_start_idx + self.lookback_batch
             range_to = week_end_idx - self.forward_set_lengh
             if range_from >= range_to:
                 continue
+            
             for i in range(range_from, range_to, self.lookback_stepsize):
-                x.append(orignal_set[i-self.lookback_batch:i, 0])
+                dataRange = dataset.iloc[i-self.lookback_batch:i,:].as_matrix().copy()
+                dataRange[:,0:1] = dataRange[:,0:1] - dataRange[:,0:1].min() # prepare symbol data for scaling
+                # get max
+                if rangeMax and dataRange[:,0:1].max() > maxSet.max():
+                    maxSet = dataRange[:,0:1]
+                # symbol is (must be!) first column
+                x.append(dataRange)
                 if symbol == self.mainSymbol:
                     y.append(self.getCategory(orignal_set[i], np.array(orignal_set[i+1:i+self.forward_set_lengh])))
             week_start_idx = week_end_idx
         
-        return x, y
+        return x, y, maxSet
 
     # symbol matches directory
     def loadSymbolCSV(self, symbol):
@@ -87,77 +98,51 @@ class DataSet():
                 df = pd.concat([df, next_df])
         return df
 
-    def createScaledSet(self, trainSet, testSet):
-        scaledTrainSet = []
-        scaledTestSet = []
-        
-        sc = MinMaxScaler(feature_range = (0.05, 1))
-        
-        maxVal = 0
-        for rangeSet in trainSet:
-            newSet = rangeSet - rangeSet.min()
-            scaledTrainSet.append(np.array([newSet]).reshape(-1,1))
-            if newSet.max() > maxVal:
-                maxVal = newSet.max()
-                sc.fit_transform(newSet.reshape(-1,1))
-                
-        for i, rangeSet in enumerate(scaledTrainSet):
-            scaledTrainSet[i] = sc.transform(rangeSet)
-
-        for rangeSet in testSet:
-            scaledTestSet.append(sc.transform(np.array([rangeSet]).reshape(-1,1)))
-        
-        return scaledTrainSet, scaledTestSet
-
-
     def getXYArrays(self, datasetTrain, datasetTest):
         ## Main Symbol ##
-        symArrTrainMain = datasetTrain[self.mainSymbol]
-        training_set_main = np.array([symArrTrainMain.values]).reshape(-1,1)
+        x_arr_train_main, y_arr_train_main, maxSet = self.getStructuredData(
+                datasetTrain, self.mainSymbol, True)
+        x_arr_test_main, y_arr_test_main, _ = self.getStructuredData(
+                datasetTest, self.mainSymbol)
         
-        symArrTestMain = datasetTest[self.mainSymbol]
-        test_set_main = np.array([symArrTestMain.values]).reshape(-1,1)
+        # scaling main symbol
+        sc = MinMaxScaler(feature_range = (0.05, 1))
+        sc.fit_transform(maxSet)
         
-        x_arr_train_main, y_arr_train_main = self.getStructuredData(
-                symArrTrainMain, training_set_main, self.mainSymbol)
-        x_arr_test_main, y_arr_test_main = self.getStructuredData(
-                symArrTestMain, test_set_main, self.mainSymbol)
+        for i, rangeSet in enumerate(x_arr_train_main):
+            x_arr_train_main[i][:,0:1] = sc.transform(rangeSet[:,0:1])
+            
+        for i, rangeSet in enumerate(x_arr_test_main):
+            x_arr_test_main[i][:,0:1] = sc.transform(rangeSet[:,0:1])
         
-        x_arr_train_main, x_arr_test_main = self.createScaledSet(x_arr_train_main, x_arr_test_main)
+        
+        X_train = np.array(x_arr_train_main)
+        X_test = np.array(x_arr_test_main)
         
         y_train = np.array(y_arr_train_main)
         y_test = np.array(y_arr_test_main)
         
-        X_train = [x_arr_train_main]
-        X_test = [x_arr_test_main]
         
         # other indicator symbols
         for symbol in self.indicatorSymbols:
-            symArrTrain = datasetTrain[symbol]
-            training_set = np.array([symArrTrain.values]).reshape(-1,1)
+            train, test = self.getDataForSymbol(symbol)
             
-            symArrTest = datasetTest[symbol]
-            test_set = np.array([symArrTest.values]).reshape(-1,1)
+            x_arr_train, y_arr_train, maxSet = self.getStructuredData(
+                train, symbol, True)
+            x_arr_test, y_arr_test, _ = self.getStructuredData(
+                test, symbol)
+            
+            # scaling symbol
+            sc.fit_transform(maxSet)
         
-            x_arr_train, y_arr_train = self.getStructuredData(
-                    symArrTrain, training_set, symbol)
-            x_arr_test, y_arr_test = self.getStructuredData(
-                    symArrTest, test_set, symbol)
-    
-            x_arr_train, x_arr_test = self.createScaledSet(x_arr_train, x_arr_test)
-    
-            X_train.append(x_arr_train)
-            X_test.append(x_arr_test)
-    
-        if self.getTrainData:
-            X_train = np.array(X_train)
-        else:
-            X_train = []
-        X_test = np.array(X_test)
-        
-        # Reshaping
-        X_train = np.moveaxis(X_train, 0, -1)
-        X_test = np.moveaxis(X_test, 0, -1)
+            for i, rangeSet in enumerate(x_arr_train):
+                x_arr_train[i][:,0:1] = sc.transform(rangeSet[:,0:1])
+                
+            for i, rangeSet in enumerate(x_arr_test):
+                x_arr_test[i][:,0:1] = sc.transform(rangeSet[:,0:1])
+            
+            X_train = np.concatenate((X_train, np.array(x_arr_train)), axis=2)
+            X_test = np.concatenate((X_test, np.array(x_arr_test)), axis=2)
     
         return X_train, y_train, X_test, y_test
 
@@ -166,22 +151,35 @@ class DataSet():
         df['fast ema'] = df[symbol].ewm(span=fast, ignore_na=False).mean()
         df['MACD'] = (df['fast ema'] - df['slow ema'])
         
-        sc = MinMaxScaler(feature_range = (-1, 1))
+        sc = MinMaxScaler(feature_range = (0, 1))
+        
+        # save indizes with negatives
+        neg_idx = (df['MACD'] < 0)
+        # multiply indexed values with -1
+        df['MACD'][neg_idx] = df['MACD']*-1
+        # scale
+        df['MACD'] = stats.mstats.winsorize(df['MACD'].values, limits=(None, 0.001))
         df[symbol+" MACD"] = sc.fit_transform(df[['MACD']])
+        # multiply indexed values with -1
+        df[symbol+" MACD"][neg_idx] = df[symbol+" MACD"]*-1
         
         df = df.drop(columns=['slow ema', 'fast ema', 'MACD'])
         
         return df
-        
+
     def setSD_MA(self, df, symbol, span):
         df['ma'] = df[symbol].rolling(span).mean()
         df['sd'] = df[symbol].rolling(span).std()
         
         df = df.dropna()
-        sc = MinMaxScaler(feature_range = (0, 1))
+        df.is_copy = False
         
-        df[symbol+" MA"] = sc.fit_transform(df.loc[:,('ma')].reshape(-1,1))
-        df[symbol+" SD"] = sc.fit_transform(df.loc[:,('sd')].reshape(-1,1))
+        df['sd'] = stats.mstats.winsorize(df['sd'].values, limits=(None, 0.001))
+        
+        sc = MinMaxScaler(feature_range = (0, 1))
+    
+        df[symbol+" MA"] = sc.fit_transform(df[['ma']])
+        df[symbol+" SD"] = sc.fit_transform(df[['sd']])
         
         df = df.drop(columns=['ma', 'sd'])
         df = df.resample('1T').asfreq()
@@ -200,7 +198,7 @@ class DataSet():
         d = d.drop(d.index[:(period-1)])
         rs = u.ewm(com=period-1, adjust=False).mean() / d.ewm(com=period-1, adjust=False).mean()
         rsi = 100 - 100 / (1 + rs)
-        df[symbol+ " RSI"] = (rsi - 50) / 100
+        df[symbol+ " RSI"] = (rsi - 50)*2 / 100
 
     def interp(self, df, limit):
         d = df.notna().rolling(limit + 1).agg(any).fillna(1)
@@ -244,48 +242,50 @@ class DataSet():
     
         return dataset_train, dataset_test
     
+    
+    
 ## Test main ##
-from datetime import datetime, timedelta
-import pickle
-
-
-getTrainData = True
-endTrain = datetime(2018,1,14)
-beginTrain = endTrain - timedelta(weeks=2)
-endTest = endTrain + timedelta(weeks=2)
-
-symbol = 'EURUSD'
-
-config = {
-     'mainSymbol'             : 'EURUSD', # base lvl
-     'indicatorSymbols'       : ['EURGBP'], # base lvl
-
-     'lookback_stepsize'      : 1, # 2nd lvl
-     'beginTrain'             : beginTrain, # 2nd lvl
-     'endTrain'               : endTrain,
-     'endTest'                : endTest, # 2nd lvl
-
-     'lookback_batch'         : 24*60, # const
-     'maxTimeDeltaAcceptance' : '1 days 1 hours', # const
-     'forward_set_lengh'      : 60, # const
-     'interpolateLimit'       : 60, # const
-     'bounds'                 : { 'EURUSD' : 0.0010 }, # const
-}
-
-
-
-dataSet = DataSet(config, True)
-trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'])
-
-for sym in config['indicatorSymbols']:
-    _train, _test = dataSet.getDataForSymbol(sym)
-
-    trainSetRAW = pd.concat([trainSetRAW, _train], axis=1, join_axes=[trainSetRAW.index])
-    testSetRAW = pd.concat([testSetRAW, _test], axis=1, join_axes=[testSetRAW.index])
-
-X_train, y_train, X_test, y_test = dataSet.getXYArrays(trainSetRAW, testSetRAW)
-
-trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'])
+#from datetime import datetime, timedelta
+#import pickle
+#
+#
+#getTrainData = True
+#endTrain = datetime(2018,1,14)
+#beginTrain = endTrain - timedelta(weeks=2)
+#endTest = endTrain + timedelta(weeks=2)
+#
+#symbol = 'EURUSD'
+#
+#config = {
+#     'mainSymbol'             : 'EURUSD', # base lvl
+#     'indicatorSymbols'       : ['EURGBP'], # base lvl
+#
+#     'lookback_stepsize'      : 1, # 2nd lvl
+#     'beginTrain'             : beginTrain, # 2nd lvl
+#     'endTrain'               : endTrain,
+#     'endTest'                : endTest, # 2nd lvl
+#
+#     'lookback_batch'         : 24*60, # const
+#     'maxTimeDeltaAcceptance' : '1 days 1 hours', # const
+#     'forward_set_lengh'      : 60, # const
+#     'interpolateLimit'       : 60, # const
+#     'bounds'                 : { 'EURUSD' : 0.0010 }, # const
+#}
+#
+#
+#
+#dataSet = DataSet(config, True)
+#trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'])
+#
+#for sym in config['indicatorSymbols']:
+#    _train, _test = dataSet.getDataForSymbol(sym)
+#
+#    trainSetRAW = pd.concat([trainSetRAW, _train], axis=1, join_axes=[trainSetRAW.index])
+#    testSetRAW = pd.concat([testSetRAW, _test], axis=1, join_axes=[testSetRAW.index])
+#
+#X_train, y_train, X_test, y_test = dataSet.getXYArrays(trainSetRAW, testSetRAW)
+#
+#trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'])
 
 
 
