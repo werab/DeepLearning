@@ -1,4 +1,14 @@
 
+# autobounding
+# look for bound with balanced categories
+# save config/data for periods
+
+# MACD / SD_MA / RSI out
+# different length on resampled data
+## 1000 Element Window
+## 5 min / 30 min / 1 h / 4 h / 8 h(?)
+
+
 ## result loggin
 ### top acc / good 
 

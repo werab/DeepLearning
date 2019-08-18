@@ -72,7 +72,7 @@ class DataSet():
                 continue
             
             for i in range(range_from, range_to, self.lookback_stepsize):
-                dataRange = dataset.iloc[i-self.lookback_batch:i,:].as_matrix().copy()
+                dataRange = dataset.iloc[i-self.lookback_batch:i,:].to_numpy(copy=True)
                 dataRange[:,0:1] = dataRange[:,0:1] - dataRange[:,0:1].min() # prepare symbol data for scaling
                 # get max
                 if rangeMax and dataRange[:,0:1].max() > maxSet.max():
@@ -171,9 +171,7 @@ class DataSet():
         df['ma'] = df[symbol].rolling(span).mean()
         df['sd'] = df[symbol].rolling(span).std()
         
-        df = df.dropna()
-        df.is_copy = False
-        
+        df = df.dropna().copy()
         df['sd'] = stats.mstats.winsorize(df['sd'].values, limits=(None, 0.001))
         
         sc = MinMaxScaler(feature_range = (0, 1))
@@ -225,11 +223,8 @@ class DataSet():
 #        with open("data.pickle", 'wb') as fp:
 #            pickle.dump(dataset_raw, fp)
         
-        if int(pd.__version__.split(".")[1]) < 23:
-            dataset_inter = dataset_inter.resample('1T').asfreq().pipe(self.interp, 60)
-        else:
-            dataset_inter = dataset_inter.resample('1T').asfreq().interpolate(method='quadratic', limit=60, limit_area='inside')
-
+        dataset_inter = dataset_inter.resample('1T').asfreq().pipe(self.interp, 60)
+ 
         # add special data
         dataset_inter = self.setMACD(dataset_inter, symbol, 26, 12)
         dataset_inter = self.setSD_MA(dataset_inter, symbol, 20)
@@ -245,35 +240,48 @@ class DataSet():
     
     
 ## Test main ##
-#from datetime import datetime, timedelta
-#import pickle
-#
-#
-#getTrainData = True
-#endTrain = datetime(2018,1,14)
-#beginTrain = endTrain - timedelta(weeks=2)
-#endTest = endTrain + timedelta(weeks=2)
-#
-#symbol = 'EURUSD'
-#
-#config = {
-#     'mainSymbol'             : 'EURUSD', # base lvl
-#     'indicatorSymbols'       : ['EURGBP'], # base lvl
-#
-#     'lookback_stepsize'      : 1, # 2nd lvl
-#     'beginTrain'             : beginTrain, # 2nd lvl
-#     'endTrain'               : endTrain,
-#     'endTest'                : endTest, # 2nd lvl
-#
-#     'lookback_batch'         : 24*60, # const
-#     'maxTimeDeltaAcceptance' : '1 days 1 hours', # const
-#     'forward_set_lengh'      : 60, # const
-#     'interpolateLimit'       : 60, # const
-#     'bounds'                 : { 'EURUSD' : 0.0010 }, # const
-#}
-#
-#
-#
+from datetime import datetime, timedelta
+import pickle
+import matplotlib.pyplot as plt
+
+getTrainData = True
+endTrain = datetime(2017,11,19)
+beginTrain = endTrain - timedelta(weeks=40)
+endTest = endTrain + timedelta(weeks=2)
+dateparse = lambda x: pd.datetime.strptime(x, '%Y.%m.%d %H:%M')
+
+symbol = 'EURUSD'
+
+config = {
+     'mainSymbol'             : 'EURUSD', # base lvl
+     'indicatorSymbols'       : [], # base lvl
+
+     'lookback_stepsize'      : 1, # 2nd lvl
+     'beginTrain'             : beginTrain, # 2nd lvl
+     'endTrain'               : endTrain,
+     'endTest'                : endTest, # 2nd lvl
+
+     'lookback_batch'         : 24*60, # const
+     'maxTimeDeltaAcceptance' : '1 days 1 hours', # const
+     'forward_set_lengh'      : 60, # const
+     'interpolateLimit'       : 60, # const
+     'bounds'                 : { 'EURUSD' : 0.0010 }, # const
+}
+
+
+def loadSymbolCSV(symbol):
+    df = None
+    
+    for year in np.arange(beginTrain.year, endTest.year+1):
+        for file in glob.glob("INPUT_DATA/%s/*%s*" % (symbol, year)):
+            print("Load: ", file)
+            next_df = pd.read_csv(file, header=None, index_col = 'datetime',
+                             parse_dates={'datetime': [0, 1]}, 
+                             date_parser=dateparse)
+            df = pd.concat([df, next_df])
+    return df
+
+
 #dataSet = DataSet(config, True)
 #trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'])
 #
@@ -291,32 +299,59 @@ class DataSet():
 
 #with open('data.pickle', 'rb') as fp:
 #    dataset_raw = pickle.load(fp)
-#  
-#def interp(df, limit):
-#    d = df.notna().rolling(limit + 1).agg(any).fillna(1)
-#    d = pd.concat({
-#        i: d.shift(-i).fillna(1)
-#        for i in range(limit + 1)
-#    }).prod(level=1)
-#
-#    return df.interpolate(limit=limit, method='quadratic').where(d.astype(bool))
-#
-## todo:
-## remove "interp" fix, if pandas 0.23 is live
+  
+def interp(df, limit):
+    d = df.notna().rolling(limit + 1).agg(any).fillna(1)
+    d = pd.concat({
+        i: d.shift(-i).fillna(1)
+        for i in range(limit + 1)
+    }).prod(level=1)
+
+    return df.interpolate(limit=limit, method='quadratic').where(d.astype(bool))
+
+dataset_raw = None
+try:
+    dataset_raw = loadSymbolCSV(symbol).sort_index()
+except:
+    print("missing data for symbol %s for year range %s - %s, 0 rows found." % (symbol, beginTrain.year, endTest.year))
+    raise
+
+dataset_inter = dataset_raw.iloc[:, 0:1]
+dataset_inter = dataset_inter.rename(columns = {2: symbol})
+dataset_inter = dataset_inter[(dataset_inter.index > beginTrain) & (dataset_inter.index < endTest)]
+
+# todo:
+# remove "interp" fix, if pandas 0.23 is live
 #if int(pd.__version__.split(".")[1]) < 23:
-#    dataset_inter = dataset_raw.resample('1T').asfreq().pipe(interp, 60)
+#dataset_inter = dataset_raw.resample('1T').asfreq().pipe(interp, 60).dropna()
+dataset_inter = dataset_inter.resample('1T').asfreq().pipe(interp, 60).dropna()
 #else:
-#    dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='quadratic', limit=60, limit_area='inside')
-#
-#
-#dataset_inter = dataset_inter.iloc[:, 0:1]
-#dataset_inter = dataset_inter.rename(columns = {2: symbol})
+#dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='quadratic', limit=60, limit_area='inside')
+
+# not correct, just for development
+#dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='index', limit=60, limit_area='inside').dropna()
+
+
+dataset_inter = dataset_inter.iloc[:, 0:1]
+dataset_inter = dataset_inter.rename(columns = {2: symbol})
+
+#from scipy.signal import savgol_filter
+from scipy.signal import filtfilt, butter
+
+b, a = butter(3, 0.15)
+dataset_inter["butter"] = filtfilt(b, a, dataset_inter[symbol])
+
+#dataset_hourly = dataset_inter.resample('W').mean().dropna()
+
+#b, a = butter(3, 0.15)
+#dataset_hourly["butter"] = filtfilt(b, a, dataset_hourly[symbol])
+
 
 #from sklearn.preprocessing import MinMaxScaler
 
-## MACD
-##dataset_inter['26 ema'] = dataset_inter[symbol].ewm(span=26, min_periods=26, ignore_na=False).mean()
-##dataset_inter['12 ema'] = dataset_inter[symbol].ewm(span=12, min_periods=12, ignore_na=False).mean()
+# MACD
+#dataset_inter['26 ema'] = dataset_inter[symbol].ewm(span=26, min_periods=26, ignore_na=False).mean()
+#dataset_inter['12 ema'] = dataset_inter[symbol].ewm(span=12, min_periods=12, ignore_na=False).mean()
 #dataset_inter['26 ema'] = dataset_inter[symbol].ewm(span=26, ignore_na=False).mean()
 #dataset_inter['12 ema'] = dataset_inter[symbol].ewm(span=12, ignore_na=False).mean()
 #dataset_inter['MACD'] = (dataset_inter['12 ema'] - dataset_inter['26 ema'])
@@ -348,21 +383,30 @@ class DataSet():
 #rsi = 100 - 100 / (1 + rs)
 #dataset_inter['RSI'] = rsi
 #dataset_inter["RSI scaled"] = (rsi - 50) / 100
-#
-#
-#import matplotlib.pyplot as plt
-#
+
+#from scipy.signal import filtfilt, butter
+
+#b, a = butter(3, 0.02)
+#dataset_inter["butter"] = filtfilt(b, a, dataset_inter[symbol])
+
+plt.figure(figsize=(19,5))
+
 #plt.plot(dataset_inter["RSI scaled"], 'black')
 #plt.plot(dataset_inter["MACD scaled"], 'r')
 #plt.plot(dataset_inter["20 sd scaled"], 'g')
 #plt.plot(dataset_inter["20 ma scaled"], 'r')
-#
-#plt.plot(dataset_raw.resample('1T').asfreq().iloc[:, 0:1], 'b')
-#
-#
-#
-#plt.plot(dataset_inter.iloc[:, 0:1], 'b')
+#plt.plot(dataset_inter["20 sd"], 'g')
+#plt.plot(dataset_inter["20 ma"], 'r')
 
+
+
+#plt.plot(dataset_hourly[symbol], 'grey')
+plt.plot(dataset_inter[symbol], 'grey')
+
+#plt.plot(dataset_inter.iloc[:, 0:1], 'y')
+
+#plt.plot(dataset_hourly["butter"], 'red')
+plt.plot(dataset_inter["butter"], 'red')
 
 
 
