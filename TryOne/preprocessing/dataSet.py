@@ -57,7 +57,7 @@ class DataSet():
         orignal_set = np.array(dataset.loc[:,(symbol)]).reshape(-1,1)
         
         # idx of new week beginnings
-        week_change_idx = np.array(dataset.reset_index()['datetime'].diff() 
+        week_change_idx = np.array(dataset.reset_index()['datetime'].diff()
             > pd.Timedelta(self.maxTimeDeltaAcceptance)).nonzero()
         week_change_idx = np.append(week_change_idx, len(orignal_set))
         
@@ -243,11 +243,12 @@ class DataSet():
 from datetime import datetime, timedelta
 import pickle
 import matplotlib.pyplot as plt
+from pandas.plotting import register_matplotlib_converters
 
 getTrainData = True
-endTrain = datetime(2017,11,19)
-beginTrain = endTrain - timedelta(weeks=40)
-endTest = endTrain + timedelta(weeks=2)
+endTrain = datetime(2018,1,14)
+beginTrain = endTrain - timedelta(weeks=1)
+endTest = endTrain + timedelta(weeks=1)
 dateparse = lambda x: pd.datetime.strptime(x, '%Y.%m.%d %H:%M')
 
 symbol = 'EURUSD'
@@ -295,7 +296,10 @@ def loadSymbolCSV(symbol):
 #
 #trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'])
 
-
+# Todos:
+# b() = butter
+#   Df: avg(Original(30)), b(1), b(5), b(30), b(60), b(4h), b(8h)
+#   getMaxTimeFrame for 8h  
 
 #with open('data.pickle', 'rb') as fp:
 #    dataset_raw = pickle.load(fp)
