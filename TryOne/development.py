@@ -3,10 +3,12 @@
 from datetime import datetime, timedelta
 import pandas as pd
 import numpy as np
-import scipy.stats as stats
+#import scipy.stats as stats
 import glob
 #from datetime import datetime, timedelta
 from sklearn.preprocessing import MinMaxScaler
+import matplotlib.pyplot as plt
+import sys
 
 getTrainData = True
 endTrain = datetime(2018,2,4)
@@ -36,6 +38,7 @@ config = {
      'bounds'                 : { 'EURUSD' : 0.0010, 'EURGBP' : 0.0010 }, # const
 }
 
+# symbol matches directory
 def loadSymbolCSV(symbol):
     df = None
     
@@ -48,68 +51,8 @@ def loadSymbolCSV(symbol):
             df = pd.concat([df, next_df])
     return df
 
-def interp(df, limit):
-    d = df.notna().rolling(limit + 1).agg(any).fillna(1)
-    d = pd.concat({
-        i: d.shift(-i).fillna(1)
-        for i in range(limit + 1)
-    }).prod(level=1)
 
-    return df.interpolate(limit=limit, method='quadratic').where(d.astype(bool))
 
-def setMACD(df, symbol, slow, fast):
-    df['slow ema'] = df[symbol].ewm(span=slow, ignore_na=False).mean()
-    df['fast ema'] = df[symbol].ewm(span=fast, ignore_na=False).mean()
-    df['MACD'] = (df['fast ema'] - df['slow ema'])
-    
-    sc = MinMaxScaler(feature_range = (0, 1))
-    
-    # save indizes with negatives
-    neg_idx = (df['MACD'] < 0)
-    # multiply indexed values with -1
-    df['MACD'][neg_idx] = df['MACD']*-1
-    # scale
-    df['MACD'] = stats.mstats.winsorize(df['MACD'].values, limits=(None, 0.001))
-    df[symbol+" MACD"] = sc.fit_transform(df[['MACD']])
-    # multiply indexed values with -1
-    df[symbol+" MACD"][neg_idx] = df[symbol+" MACD"]*-1
-    
-    df = df.drop(columns=['slow ema', 'fast ema', 'MACD'])
-    
-    return df
-    
-def setSD_MA(df, symbol, span):
-    df['ma'] = df[symbol].rolling(span).mean()
-    df['sd'] = df[symbol].rolling(span).std()
-    
-    df = df.dropna()
-    df.is_copy = False
-    
-    df['sd'] = stats.mstats.winsorize(df['sd'].values, limits=(None, 0.001))
-    
-    sc = MinMaxScaler(feature_range = (0, 1))
-
-    df[symbol+" MA"] = sc.fit_transform(df[['ma']])
-    df[symbol+" SD"] = sc.fit_transform(df[['sd']])
-    
-    df = df.drop(columns=['ma', 'sd'])
-    df = df.resample('1T').asfreq()
-    
-    return df
-
-def setRSI(df,  symbol, period = 14):
-    delta = df[symbol].diff().dropna()
-    u = delta * 0
-    d = u.copy()
-    u[delta > 0] = delta[delta > 0]
-    d[delta < 0] = -delta[delta < 0]
-    u[u.index[period-1]] = np.mean( u[:period] )
-    u = u.drop(u.index[:(period-1)])
-    d[d.index[period-1]] = np.mean( d[:period] )
-    d = d.drop(d.index[:(period-1)])
-    rs = u.ewm(com=period-1, adjust=False).mean() / d.ewm(com=period-1, adjust=False).mean()
-    rsi = 100 - 100 / (1 + rs)
-    df[symbol+ " RSI"] = (rsi - 50)*2 / 100
 
 def getDataForSymbol(symbol):
     # parse 0/1 column to datetime column
@@ -123,16 +66,12 @@ def getDataForSymbol(symbol):
     dataset_inter = dataset_raw.iloc[:, 0:1]
     dataset_inter = dataset_inter.rename(columns = {2: symbol})
     dataset_inter = dataset_inter[(dataset_inter.index > beginTrain) & (dataset_inter.index < endTest)]
+
     
     if int(pd.__version__.split(".")[1]) < 23:
         dataset_inter = dataset_inter.resample('1T').asfreq().pipe(interp, 60)
     else:
         dataset_inter = dataset_inter.resample('1T').asfreq().interpolate(method='quadratic', limit=60, limit_area='inside')
-
-    # add special data
-    dataset_inter = setMACD(dataset_inter, symbol, 26, 12)
-    dataset_inter = setSD_MA(dataset_inter, symbol, 20)
-    setRSI(dataset_inter, symbol, 14)
 
     dataset_inter = dataset_inter.dropna()
 
@@ -141,11 +80,42 @@ def getDataForSymbol(symbol):
 
     return dataset_train, dataset_test
 
+def getXYArrays(datasetTrain, datasetTest):
+    ## Main Symbol ##
+    x_arr_train_main, y_arr_train_main, maxSet = getStructuredData(
+            datasetTrain, mainSymbol, True)
+    x_arr_test_main, y_arr_test_main, _ = getStructuredData(
+            datasetTest, mainSymbol)
+    
+    # scaling main symbol
+    sc = MinMaxScaler(feature_range = (0.05, 1))
+    sc.fit_transform(maxSet)
+    
+    for i, rangeSet in enumerate(x_arr_train_main):
+        x_arr_train_main[i][:,0:1] = sc.transform(rangeSet[:,0:1])
+        
+    for i, rangeSet in enumerate(x_arr_test_main):
+        x_arr_test_main[i][:,0:1] = sc.transform(rangeSet[:,0:1])
+    
+    
+    X_train = np.array(x_arr_train_main)
+    X_test = np.array(x_arr_test_main)
+    
+    y_train = np.array(y_arr_train_main)
+    y_test = np.array(y_arr_test_main)
+
+    return X_train, y_train, X_test, y_test
+
+
 forward_set_lengh = config['forward_set_lengh']
 bounds = config['bounds']
 forward_set_lengh = config['forward_set_lengh']
 lookback_stepsize = config['lookback_stepsize']
 
+# categories
+# 0: > value + bound                       --> buy 
+# 1: < value - bound                       --> sell
+# 2: < value + bound && > value - bound    --> nothing
 def getCategory(value, np_forward_set):
     if (np_forward_set.max() > value + bounds[mainSymbol]):
         if (np_forward_set.min() < value - bounds[mainSymbol]):
@@ -173,8 +143,6 @@ forward_set_lengh = config['forward_set_lengh']
 lookback_stepsize = config['lookback_stepsize']
 
 
-# todo:
-# check check and double check if this is still correct
 def getStructuredData(dataset, symbol, rangeMax = False):
     x = []
     y = []
@@ -182,7 +150,7 @@ def getStructuredData(dataset, symbol, rangeMax = False):
     orignal_set = np.array(dataset.loc[:,(symbol)]).reshape(-1,1)
     
     # idx of new week beginnings
-    week_change_idx = np.array(dataset.reset_index()['datetime'].diff() 
+    week_change_idx = np.array(dataset.reset_index()['datetime'].diff()
         > pd.Timedelta(maxTimeDeltaAcceptance)).nonzero()
     week_change_idx = np.append(week_change_idx, len(orignal_set))
     
@@ -197,7 +165,7 @@ def getStructuredData(dataset, symbol, rangeMax = False):
             continue
         
         for i in range(range_from, range_to, lookback_stepsize):
-            dataRange = dataset.iloc[i-lookback_batch:i,:].as_matrix().copy()
+            dataRange = dataset.iloc[i-lookback_batch:i,:].to_numpy(copy=True)
             dataRange[:,0:1] = dataRange[:,0:1] - dataRange[:,0:1].min() # prepare symbol data for scaling
             # get max
             if rangeMax and dataRange[:,0:1].max() > maxSet.max():
@@ -210,88 +178,204 @@ def getStructuredData(dataset, symbol, rangeMax = False):
     
     return x, y, maxSet
 
+def bfill_nan(arr):
+    """ Backward-fill NaNs """
+    mask = np.isnan(arr)
+    idx = np.where(~mask, np.arange(mask.shape[0]), mask.shape[0]-1)
+    idx = np.minimum.accumulate(idx[::-1], axis=0)[::-1]
+    out = arr[idx]
+    return out
+
+def calc_mask(arr, maxgap):
+    """ Mask NaN gaps longer than `maxgap` """
+    isnan = np.isnan(arr)
+    cumsum = np.cumsum(isnan).astype('float')
+    diff = np.zeros_like(arr)
+    diff[~isnan] = np.diff(cumsum[~isnan], prepend=0)
+    diff[isnan] = np.nan
+    diff = bfill_nan(diff)
+    return (diff <= maxgap) | ~isnan # <= instead of < compared to SO answer
+
 mainSymbol = config['mainSymbol']
 indicatorSymbols = config['indicatorSymbols']
 getTrainData = True
 
 
 
-trainSetRAW, testSetRAW = getDataForSymbol(config['mainSymbol'])
+#dataSet = DataSet(config, True)
+#trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'])
+#
+#for sym in config['indicatorSymbols']:
+#    _train, _test = dataSet.getDataForSymbol(sym)
+#
+#    trainSetRAW = pd.concat([trainSetRAW, _train], axis=1, join_axes=[trainSetRAW.index])
+#    testSetRAW = pd.concat([testSetRAW, _test], axis=1, join_axes=[testSetRAW.index])
+#
+#X_train, y_train, X_test, y_test = dataSet.getXYArrays(trainSetRAW, testSetRAW)
+#
+#trainSetRAW, testSetRAW = dataSet.getDataForSymbol(config['mainSymbol'])
 
-datasetTrain = trainSetRAW.copy()
-datasetTest = testSetRAW.copy()    
-    
-x_arr_train_main, y_arr_train_main, maxSet = getStructuredData(
-        datasetTrain, mainSymbol, True)
-x_arr_test_main, y_arr_test_main, _ = getStructuredData(
-        datasetTest, mainSymbol)
+#trainSetRAW, testSetRAW = getDataForSymbol(config['mainSymbol'])
+#X_train, y_train, X_test, y_test = getXYArrays(trainSetRAW, testSetRAW)
 
-# scaling symbol
-sc = MinMaxScaler(feature_range = (0.05, 1))
-sc.fit_transform(maxSet)
+# Todos:
+# b() = butter
+#   Df: avg(Original(30)), b(1), b(5), b(30), b(60), b(4h), b(8h)
+#   getMaxTimeFrame for 8h  
 
-for i, rangeSet in enumerate(x_arr_train_main):
-    x_arr_train_main[i][:,0:1] = sc.transform(rangeSet[:,0:1])
-    
-for i, rangeSet in enumerate(x_arr_test_main):
-    x_arr_test_main[i][:,0:1] = sc.transform(rangeSet[:,0:1])
-
-
-X_train = np.array(x_arr_train_main)
-X_test = np.array(x_arr_test_main)
-
-y_train = np.array(y_arr_train_main)
-y_test = np.array(y_arr_test_main)
+#with open('data.pickle', 'rb') as fp:
+#    dataset_raw = pickle.load(fp)
 
 
-# other indicator symbols
-for symbol in indicatorSymbols:
-    train, test = getDataForSymbol(symbol)
-    
-    x_arr_train, y_arr_train, maxSet = getStructuredData(
-        train, symbol, True)
-    x_arr_test, y_arr_test, _ = getStructuredData(
-        test, symbol)
-    
-    sc.fit_transform(maxSet)
+# def interp(df, limit):
+#     d = df.notna().rolling(limit + 1).agg(any).fillna(1)
+#     d = pd.concat({
+#         i: d.shift(-i).fillna(1)
+#         for i in range(limit + 1)
+#     }).prod(level=1)
 
-    for i, rangeSet in enumerate(x_arr_train):
-        x_arr_train[i][:,0:1] = sc.transform(rangeSet[:,0:1])
+#     return df.interpolate(limit=limit, method='quadratic').where(d.astype(bool))
+
+dataset_raw = None
+try:
+    dataset_raw = loadSymbolCSV(symbol).sort_index()
+except:
+    print("missing data for symbol %s for year range %s - %s, 0 rows found." % (symbol, beginTrain.year, endTest.year))
+    raise
+
+#plt.figure(figsize=(19,5))
+
+import matplotlib.collections as collections
+from matplotlib import dates as mdates
+import matplotlib.ticker as mticker
+
+dataset_inter = dataset_raw.iloc[:20, 0:1]
+dataset_inter = dataset_inter.rename(columns = {2: symbol})
+
+#fig, ax = plt.subplots(figsize=(19,5))
+
+# find_gaps = dataset_inter.resample('1T').asfreq()
+# dates = find_gaps.index.to_pydatetime()
+# x_val = mdates.date2num(dates)
+
+# collection = collections.BrokenBarHCollection.span_where(
+#     x_val, 
+#     ymin=dataset_inter[symbol].min(), 
+#     ymax=dataset_inter[symbol].max(), 
+#     where=find_gaps[symbol].isna(),
+#     facecolor='grey',
+#     edgecolor='grey', 
+#     linewidth=1.0,
+#     alpha=0.3,
+#     label='span')
+# ax.add_collection(collection)
+
+
+
+#ax2.bar(asd.index.values, asd["NANs"],  width=0.01, alpha=0.2, color='orange')
+#ax2.grid(b=False)
+
+#asd.plot.bar(x=None, y=None, ax=ax2, alpha=0.2, color='orange')
+#fig.plot(dataset_inter[symbol], 'grey', label=symbol)
+
+#legend = plt.legend(frameon = True)
+#plt.show()
+
+#sys.exit()
+
+
+
+
+#dataset_inter = dataset_inter[(dataset_inter.index > beginTrain) & (dataset_inter.index < endTest)]
+
+# todo:
+# remove "interp" fix, if pandas 0.23 is live
+#if int(pd.__version__.split(".")[1]) < 23:
+#dataset_inter = dataset_raw.resample('1T').asfreq().pipe(interp, 60).dropna()
+#dataset_inter = dataset_inter.resample('1T').asfreq().pipe(interp, 60).dropna()
+#else:
+#dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='quadratic', limit=60, limit_area='inside')
+
+# not correct, just for development
+#dataset_inter = dataset_raw.resample('1T').asfreq().interpolate(method='index', limit=60, limit_area='inside').dropna()
+#dataset_inter = dataset_inter.resample('1T').asfreq().interpolate(method='index', limit=1).dropna() # <-- good enough
+dataset_inter = dataset_inter.resample('1T').asfreq().interpolate(method='index', limit=60).where(calc_mask(dataset_inter[symbol],60)).dropna()
+#dataset_inter = dataset_inter.resample('1T').asfreq('B').interpolate(method='index', limit=60).where(calc_mask(dataset_inter[symbol],60))
+
+#blub = dataset_inter.resample('1T').asfreq().dropna()
+#blub.plot()
+
+
+#from scipy.signal import savgol_filter
+from scipy.signal import filtfilt, butter
+
+#b, a = butter(3, 0.15)
+#dataset_inter["butter"] = filtfilt(b, a, dataset_inter[symbol])
+
+#dataset_hourly = dataset_inter.resample('W').mean().dropna()
+
+#b, a = butter(3, 0.15)
+#dataset_hourly["butter"] = filtfilt(b, a, dataset_hourly[symbol])
+
+#from scipy.signal import filtfilt, butter
+
+#b, a = butter(3, 0.02)
+#dataset_inter["butter"] = filtfilt(b, a, dataset_inter[symbol])
+
+#dataset_inter["withNAN"] = dataset_raw.iloc[:, 0:1].fillna(10)
+
+#plt.plot(dataset_inter[symbol], 'grey', label=symbol)
+#t = ax.plot(dataset_inter[symbol], marker='.', color='grey', label=symbol)
+
+
+
+
+# class Jackarow(mdates.DateFormatter):
+#  	def __init__(self, fmt):
+#           mdates.DateFormatter.__init__(self, fmt)
         
-    for i, rangeSet in enumerate(x_arr_test):
-        x_arr_test[i][:,0:1] = sc.transform(rangeSet[:,0:1])
+#  	def __call__(self, x, pos=0):
+#   		# This gets called even when out of bounds, so IndexError must be prevented.
+#           if dataset_inter.index.minute % 2 == 0:
+#               return ''
+#           else:
+#               return mdates.DateFormatter.__call__(self, x, pos)
+
+# f = ax.plot(range(len(dataset_inter)), dataset_inter[symbol], marker='.', color='grey', label=symbol) 
+
+# ax.xaxis.set_major_locator(mticker.MaxNLocator(10))
+# ax.xaxis.set_major_formatter(Jackarow('%a %H:%M'))
     
-    X_train = np.concatenate((X_train, np.array(x_arr_train)), axis=2)
-    X_test = np.concatenate((X_test, np.array(x_arr_test)), axis=2)
-    
-    
-    
-#X_train[:,:,2][:,0]
-#import matplotlib.pyplot as plt
-#plt.plot(X_train[:,:,2][:,0], 'black')
-#plt.plot(X_train[:,:,0][:,0], 'b')
-#
-#val = 4800
-#plt.plot(X_train[val][:,0:1], 'b')
-#plt.plot(X_train[val][:,2:3], 'g')
-#
-#val = 7000
-#plt.plot(X_train[val][:,1:2], 'b')
-#plt.plot(X_train[val][:,3:4], 'g')
-#
-#import matplotlib.pyplot as plt
-#plt.plot(datasetTrain['EURUSD MACD'], 'b')
-#plt.plot(train['EURGBP MACD'], 'r')
-#
-#plt.plot(datasetTrain['EURUSD RSI'], 'b')
-#plt.plot(train['EURGBP RSI'], 'r')
-#
-#plt.plot(datasetTest['EURUSD MACD'], 'b')
-#plt.plot(test['EURGBP MACD'], 'r')
-#
-#plt.plot(train['MACD'], 'r')
+
+#locator = mdates.AutoDateLocator()
+#formatter = mdates.AutoDateFormatter(locator)
+#ax.xaxis.set_major_formatter(formatter)
 
 
+#ax.set_xticklabels(dataset_inter.index.date.tolist());
+#fig.autofmt_xdate()
+
+
+
+#plt.plot(dataset_inter["RSI scaled"], 'black')
+#plt.plot(dataset_inter["MACD scaled"], 'r')
+#plt.plot(dataset_inter["20 sd scaled"], 'g')
+#plt.plot(dataset_inter["20 ma scaled"], 'r')
+#plt.plot(dataset_inter["20 sd"], 'g')
+#plt.plot(dataset_inter["20 ma"], 'r')
+
+#plt.plot(dataset_hourly[symbol], 'grey')
+#plt.plot(dataset_inter[symbol], 'grey', label=symbol)
+
+#plt.plot(dataset_inter.iloc[:, 0:1], 'y')
+
+#plt.plot(dataset_hourly["butter"], 'red')
+#plt.plot(dataset_inter["butter"], 'red', label="butter")
+#b = ax.plot(dataset_inter["butter"], 'red', label="butter")
+#plt.plot(dataset_inter["withNAN"], 'blue')
+
+# plt.legend()
+# plt.show()
 
 # Reshaping
 # goal shape (<events>, <timeframe 1440>, <different metrics>)
@@ -325,6 +409,75 @@ for symbol in indicatorSymbols:
 
 # shape
 # (<testevents>, <timeframe 1440>, <different metrics>)
+
+
+# pd.np.random.seed(1234)
+# idx = pd.date_range(end=datetime.today().date(), periods=10, freq='T')
+# vals = pd.Series(pd.np.random.randint(1, 10, size=idx.size), index=idx)
+# vals.iloc[4:8] = pd.np.nan
+
+# fig, ax = plt.subplots()
+# ax.plot(range(vals.dropna().size), vals.dropna())
+# ax.set_xticklabels(vals.dropna().index.date.tolist());
+# fig.autofmt_xdate()
+
+
+
+
+import dash
+import dash_core_components as dcc
+import dash_html_components as html
+import plotly.express as px
+import pandas as pd
+
+external_stylesheets = ['https://codepen.io/chriddyp/pen/bWLwgP.css']
+
+app = dash.Dash(__name__, external_stylesheets=external_stylesheets)
+
+# assume you have a "long-form" data frame
+# see https://plotly.com/python/px-arguments/ for more options
+df = pd.DataFrame({
+    "Fruit": ["Apples", "Oranges", "Wiggle", "Apples", "Oranges", "Bananas"],
+    "Amount": [10, 1, 2, 2, 4, 10],
+    "City": ["WW", "WW", "WW", "Montreal", "Montreal", "Montreal"]
+})
+
+fig = px.bar(df, x="Fruit", y="Amount", color="City")
+
+app.layout = html.Div(children=[
+    html.H1(children='12345 Dagreesh'),
+
+    html.Div(children='''
+        Dash: A web application framework for Python.
+    '''),
+
+    dcc.Graph(
+        id='example-graph',
+        figure=fig
+    )
+])
+
+if __name__ == '__main__':
+    app.run_server(debug=True)
+
+    print("*** End ***")
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
